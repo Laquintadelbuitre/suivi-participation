@@ -158,6 +158,7 @@
       <button data-vue="feuille" class="actif">Feuilles de match<span id="pastilleNav"></span></button>
       <button data-vue="joueurs">Joueurs</button>
       <button data-vue="ajouter">Ajouter</button>
+      <button data-vue="parametres">Paramètres</button>
       <a class="lien-externe" id="lienConvocations" target="_blank" rel="noopener"
          href="https://laquintadelbuitre.github.io/convoc-LF/">Convocations ↗</a>
     </nav>
@@ -268,12 +269,31 @@
         <div class="pied"><span></span><button class="bouton" id="btnAjouterJoueur">Ajouter le joueur</button></div>
       </div>
 
+    </section>
+
+    <!-- ============ PARAMÈTRES ============ -->
+    <section id="vue-parametres" class="vue">
       <div class="carte">
-        <h2>Règle 2 – dernières journées</h2>
-        <p class="sous">Les deux dernières journées de chaque phase se renseignent dans l'onglet <b>Phases</b> du Sheet
-          (une ligne par phase et par équipe). Les paramètres (règles actives, seuils, phase courante, clé d'accès)
-          sont dans l'onglet <b>Parametres</b>.</p>
+        <h2>Règle 2 – les 2 dernières journées de chaque phase</h2>
+        <p class="sous" style="margin-top:-6px">Une ligne par phase et par équipe. Laissez vide si ce n'est pas encore connu.</p>
+        <div class="tableau-conteneur">
+          <table>
+            <thead><tr><th>Phase</th><th>Équipe</th><th>Avant-dernière journée</th><th>Dernière journée</th><th></th></tr></thead>
+            <tbody id="corpsPhases"><tr><td colspan="5" class="chargement">Chargement…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="pied">
+          <button class="bouton secondaire" id="btnAjouterPhase">+ Ajouter une ligne</button>
+          <button class="bouton secondaire" id="btnRemplirPhase">Remplir les 3 équipes pour une phase</button>
+        </div>
       </div>
+
+      <div class="carte">
+        <h2>Réglages</h2>
+        <div class="grille" id="grilleParametres"><p class="chargement">Chargement…</p></div>
+      </div>
+
+      <div class="pied"><span></span><button class="bouton" id="btnEnregistrerParametres">Enregistrer les paramètres</button></div>
     </section>
   </main>
 
@@ -360,6 +380,7 @@
         b.classList.add('actif');
         document.getElementById('vue-' + b.dataset.vue).classList.add('active');
         if (b.dataset.vue === 'joueurs') chargerJoueurs();
+        if (b.dataset.vue === 'parametres') chargerParametres();
       });
     });
 
@@ -636,6 +657,106 @@
           t.seuil + ' matchs avec une équipe supérieure : il compte dans le quota de la règle 3 quand il joue plus bas.';
       }).catch(erreur);
     }
+
+
+    /* ---------- Paramètres ---------- */
+    var LIBELLES_PARAM = {
+      REGLE1_ACTIVE: 'Règle 1 active', REGLE2_ACTIVE: 'Règle 2 active',
+      REGLE3_ACTIVE: 'Règle 3 active', REGLE4_ACTIVE: 'Règle 4 active',
+      SEUIL_MATCHS_SUP: 'Règle 3 : seuil de matchs en équipe sup.',
+      MAX_HABITUES: 'Règle 3 : maximum de ces joueurs par feuille',
+      NON_VALIDEES: 'Feuilles non validées',
+      PHASE_COURANTE: 'Phase courante (feuilles reçues)'
+    };
+    var equipesParam = [];
+    function optionsEquipes(sel) {
+      return equipesParam.map(function (e) {
+        return '<option value="' + esc(e.equipe) + '"' + (String(sel) === e.equipe ? ' selected' : '') + '>Équipe ' +
+          esc(e.equipe) + (e.niveau ? ' (' + esc(e.niveau) + ')' : '') + '</option>';
+      }).join('');
+    }
+    function lignePhase(p) {
+      return '<tr><td><input type="text" class="ph-phase" style="width:60px" value="' + esc(p.phase || '') + '"></td>' +
+        '<td><select class="ph-equipe">' + optionsEquipes(p.equipe) + '</select></td>' +
+        '<td><input type="number" min="1" class="ph-avant" style="width:90px" value="' + esc(p.avant || '') + '"></td>' +
+        '<td><input type="number" min="1" class="ph-derniere" style="width:90px" value="' + esc(p.derniere || '') + '"></td>' +
+        '<td class="centre"><button class="bouton secondaire ph-suppr" title="Supprimer">✕</button></td></tr>';
+    }
+    function afficherPhases(phases) {
+      var corps = document.getElementById('corpsPhases');
+      corps.innerHTML = phases.length ? phases.map(lignePhase).join('') :
+        '<tr class="vide"><td colspan="5" class="chargement">Aucune phase renseignée.</td></tr>';
+    }
+    function lirePhases() {
+      return Array.prototype.map.call(document.querySelectorAll('#corpsPhases tr:not(.vide)'), function (tr) {
+        return {
+          phase: tr.querySelector('.ph-phase').value.trim(), equipe: tr.querySelector('.ph-equipe').value,
+          avant: tr.querySelector('.ph-avant').value, derniere: tr.querySelector('.ph-derniere').value
+        };
+      });
+    }
+    function ajouterLignesPhase(lignes) {
+      var corps = document.getElementById('corpsPhases');
+      var vide = corps.querySelector('tr.vide');
+      if (vide) vide.remove();
+      corps.insertAdjacentHTML('beforeend', lignes.map(lignePhase).join(''));
+    }
+    function afficherParametres(r) {
+      equipesParam = r.equipes;
+      afficherPhases(r.phases);
+      document.getElementById('grilleParametres').innerHTML = r.parametres.map(function (p) {
+        var lib = esc(LIBELLES_PARAM[p.cle] || p.cle);
+        var champ;
+        if (p.type === 'bool') {
+          return '<label style="flex-direction:row;align-items:center;gap:8px;font-size:14px;color:inherit" title="' +
+            esc(p.description) + '"><input type="checkbox" data-cle="' + p.cle + '"' + (p.valeur ? ' checked' : '') + '>' + lib + '</label>';
+        }
+        if (p.cle === 'NON_VALIDEES') {
+          champ = '<select data-cle="NON_VALIDEES">' +
+            '<option value="CONVOQUES"' + (p.valeur !== 'IGNORER' ? ' selected' : '') + '>Les convoqués comptent (prudent)</option>' +
+            '<option value="IGNORER"' + (p.valeur === 'IGNORER' ? ' selected' : '') + '>Ne comptent pas</option></select>';
+        } else {
+          champ = '<input type="' + (p.type === 'nombre' ? 'number' : 'text') + '" min="0" data-cle="' + p.cle +
+            '" value="' + esc(p.valeur) + '">';
+        }
+        return '<label title="' + esc(p.description) + '">' + lib + champ + '</label>';
+      }).join('');
+    }
+    function chargerParametres() {
+      appel('getParametres').then(afficherParametres).catch(erreur);
+    }
+    document.getElementById('corpsPhases').addEventListener('click', function (ev) {
+      if (!ev.target.classList.contains('ph-suppr')) return;
+      ev.target.closest('tr').remove();
+      if (!lirePhases().length) afficherPhases([]);
+    });
+    document.getElementById('btnAjouterPhase').addEventListener('click', function () {
+      var existantes = lirePhases();
+      var der = existantes.length ? existantes[existantes.length - 1].phase : '1';
+      ajouterLignesPhase([{ phase: der, equipe: equipesParam.length ? equipesParam[0].equipe : '1' }]);
+    });
+    document.getElementById('btnRemplirPhase').addEventListener('click', function () {
+      var ph = window.prompt('Numéro de la phase :', '1');
+      if (!ph) return;
+      var avant = window.prompt('Avant-dernière journée (laisser vide si inconnue) :', '');
+      var derniere = window.prompt('Dernière journée (laisser vide si inconnue) :', '');
+      var deja = lirePhases().map(function (p) { return p.phase + '|' + p.equipe; });
+      ajouterLignesPhase(equipesParam.filter(function (e) { return deja.indexOf(ph.trim() + '|' + e.equipe) === -1; })
+        .map(function (e) { return { phase: ph.trim(), equipe: e.equipe, avant: avant, derniere: derniere }; }));
+    });
+    document.getElementById('btnEnregistrerParametres').addEventListener('click', function () {
+      var params = {};
+      document.querySelectorAll('#grilleParametres [data-cle]').forEach(function (el) {
+        params[el.dataset.cle] = el.type === 'checkbox' ? el.checked : el.value;
+      });
+      var btn = this;
+      btn.disabled = true;
+      appel('enregistrerParametres', params, lirePhases()).then(function (r) {
+        afficherParametres(r);
+        toast('Paramètres enregistrés.');
+        return rafraichirDonnees(etat.feuille ? etat.feuille.match.id : null);
+      }).catch(erreur).then(function () { btn.disabled = false; });
+    });
 
     /* ---------- Ajouts ---------- */
     document.getElementById('btnAjouterMatch').addEventListener('click', function () {
