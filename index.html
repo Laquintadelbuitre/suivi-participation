@@ -529,9 +529,23 @@
         (inconnus.length ? ' · non reconnu(s) : ' + inconnus.join(', ') + ' (ajoutez-le(s) ci-dessous ou cochez à la main)' : '');
     });
 
+    var VERSION_ATTENDUE = '2026-10-05b';
+    function verifierVersion(d) {
+      if (d.version === VERSION_ATTENDUE || document.getElementById('alerteVersion')) return;
+      var b = document.createElement('div');
+      b.id = 'alerteVersion';
+      b.className = 'bandeau bloque';
+      b.style.margin = '12px auto';
+      b.style.maxWidth = '1170px';
+      b.innerHTML = '⛔ <b>Le script Google (Code.gs) n\'est pas à jour.</b> Les enfants convoqués des feuilles ajoutées ' +
+        'à la main ne sont pas enregistrés. Dans Apps Script : collez le nouveau Code.gs, puis Déployer → Gérer les ' +
+        'déploiements → crayon → Nouvelle version → Déployer.';
+      document.querySelector('main').prepend(b);
+    }
     function rafraichirDonnees(selection) {
       return appel('getDonneesInitiales').then(function (d) {
         etat.donnees = d;
+        verifierVersion(d);
         remplirEquipes(d);
         var cible = remplirSelect(d, selection);
         majBandeauAValider();
@@ -555,7 +569,17 @@
     document.getElementById('selectMatch').addEventListener('change', function (e) { ouvrirFeuille(e.target.value); });
     document.getElementById('filtreConvoques').addEventListener('change', afficherFeuille);
     ['iType', 'iPhase', 'iJournee'].forEach(function (id) {
-      document.getElementById(id).addEventListener('input', function () { etat.modifie = true; majSynthese(); });
+      document.getElementById(id).addEventListener('input', function () {
+        // garde la saisie en mémoire : elle survit au rafraîchissement du tableau
+        if (etat.feuille) {
+          var m = etat.feuille.match;
+          m.type = document.getElementById('iType').value;
+          m.phase = document.getElementById('iPhase').value.trim();
+          m.journee = Number(document.getElementById('iJournee').value) || null;
+        }
+        etat.modifie = true;
+        majSynthese();
+      });
     });
 
     function chargerFeuille(id) {
@@ -564,6 +588,8 @@
       appel('getFeuilleMatch', id).then(function (f) {
         etat.feuille = f;
         etat.modifie = false;
+        var aucun = !f.lignes.some(function (l) { return l.convoque || l.entre; });
+        document.getElementById('filtreConvoques').checked = !aucun;
         afficherFeuille();
         majBandeauAValider();
       }).catch(erreur);
@@ -661,7 +687,9 @@
         messages.push('⚠️ Règle 3 : ' + habitues.length + ' / ' + f.maxHabitues + ' joueur(s) du quota sur la feuille.');
       }
       if (!messages.length) {
-        messages.push(sur.length ? '✅ Feuille conforme aux règles 1 à 4.' : 'Aucun joueur convoqué pour ce match.');
+        messages.push(sur.length ? '✅ Feuille conforme aux règles 1 à 4.' :
+          'Aucun enfant convoqué sur cette feuille : cochez « Convoqué » et « Entré en jeu » ci-dessous (tout l\'effectif est affiché), ' +
+          'ou refaites l\'ajout depuis « Ajouter » : la feuille existante sera complétée.');
       }
       html += '<div class="bandeau ' + classe + '">' + messages.join('<br>') + '</div>';
       document.getElementById('bandeau').innerHTML = html;
@@ -1042,6 +1070,10 @@
       var btn = this;
       btn.disabled = true;
       appel('ajouterMatch', m).then(function (d) {
+        if (!d.nouveauMatch) {
+          verifierVersion({});
+          throw new Error('Script Google pas à jour : la feuille est créée mais sans les enfants. Redéployez Code.gs.');
+        }
         ['mAdversaire', 'mJournee', 'mHeure', 'mListe', 'mDate'].forEach(function (id) { document.getElementById(id).value = ''; });
         document.getElementById('mEquipe').value = '';
         document.getElementById('mNonReconnus').textContent = '';
@@ -1053,7 +1085,9 @@
         return rafraichirDonnees(d.nouveauMatch).then(function () {
           document.querySelector('nav button[data-vue=feuille]').click();
           ouvrirFeuille(d.nouveauMatch);
-          toast('Feuille créée (' + joueurs.length + ' convoqué(s)) : vérifiez les statuts.');
+          toast(d.miseAJour && !d.nbConvoques ? 'Cette feuille existe déjà : la voici.' :
+            (d.miseAJour ? 'Feuille existante complétée (' : 'Feuille créée (') + d.nbConvoques +
+            ' convoqué(s)) : vérifiez les statuts.');
         });
       }).catch(erreur).then(function () { btn.disabled = false; });
     });
