@@ -69,38 +69,21 @@
       background: var(--bloque); color: #fff; font-size: 12px; font-weight: 700; text-align: center;
     }
     main { padding: 16px; max-width: 1200px; margin: 0 auto; }
-    .grille-convoques { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin-top: 10px; }
-    .grille-convoques label { flex-direction: row; align-items: center; gap: 8px; font-size: 14px; color: inherit;
-      border: 1px solid var(--bord, #ddd); border-radius: 8px; padding: 6px 8px; cursor: pointer; }
-    .grille-convoques label.coche { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
-    .grille-convoques small { color: var(--doux); margin-left: auto; }
-    .titre-convoques { font-size: 15px; margin: 18px 0 8px; display: flex; align-items: center; gap: 8px; }
-    .badge-compte { background: var(--accent); color: #fff; font-weight: 600; border-radius: 999px; padding: 1px 9px; font-size: 13px; }
     textarea { font: inherit; padding: 8px; border-radius: 8px; border: 1px solid var(--bord, #ccc); background: inherit; color: inherit; resize: vertical; }
-    .zone-image { display: flex; gap: 14px; align-items: center; border: 2px dashed var(--bord); border-radius: 10px;
-      padding: 12px 14px; margin-bottom: 14px; cursor: pointer; }
-    .zone-image.survol { border-color: var(--accent); background: var(--info-fond); }
-    .zone-image img { width: 160px; max-height: 90px; object-fit: contain; border-radius: 6px; border: 1px solid var(--bord); }
     .etat-image { display: block; margin-top: 4px; font-size: 13px; }
     .etat-image.ok { color: var(--ok); } .etat-image.alerte { color: var(--alerte); }
-    label.tout { flex-direction: row; justify-content: center; align-items: center; gap: 6px; font-size: inherit;
-      color: inherit; cursor: pointer; white-space: nowrap; }
-    .astuce { font-size: 12px; color: var(--doux); margin-top: 6px; }
     .vue { display: none; }
     .vue.active { display: block; }
     .carte {
       background: var(--carte); border: 1px solid var(--bord); border-radius: 12px;
       padding: 16px; margin-bottom: 16px;
     }
-    .barre { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
     label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--doux); }
-    label.case { flex-direction: row; align-items: center; gap: 8px; color: var(--texte); font-size: 14px; }
     select, input[type=text], input[type=date], input[type=number], input[type=password] {
       font: inherit; color: var(--texte); background: var(--fond);
       border: 1px solid var(--bord); border-radius: 8px; padding: 8px 10px; min-width: 0;
     }
     select:disabled, input:disabled { opacity: .7; }
-    #selectMatch { min-width: min(560px, 100%); }
     .bouton {
       font: inherit; border: 0; border-radius: 8px; padding: 9px 16px; cursor: pointer;
       background: var(--accent); color: var(--accent-texte); font-weight: 600;
@@ -108,10 +91,6 @@
     .bouton:disabled { opacity: .5; cursor: default; }
     .bouton.secondaire { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
     .bouton.valider { background: var(--ok); color: #fff; }
-    .info-match { color: var(--doux); margin-top: 10px; }
-    .infos-match { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-top: 12px; }
-    .infos-match input[type=number] { width: 90px; }
-    .infos-match input[type=text] { width: 70px; }
     .statut {
       display: inline-block; padding: 4px 10px; border-radius: 999px; font-weight: 600; font-size: 13px;
     }
@@ -122,25 +101,12 @@
     .bandeau.ok { background: var(--ok-fond); color: var(--ok); }
     .bandeau.alerte { background: var(--alerte-fond); color: var(--alerte); }
     .bandeau.bloque { background: var(--bloque-fond); color: var(--bloque); }
-    .bandeau.info {
-      background: var(--info-fond); color: var(--texte);
-      display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;
-    }
     .tableau-conteneur { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; }
     th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--bord); vertical-align: top; }
     th { font-size: 12px; color: var(--doux); font-weight: 600; white-space: nowrap; }
     tbody tr:hover { background: var(--ligne-survol); }
-    tr.convoque-bloque { background: var(--bloque-fond); }
     td.centre, th.centre { text-align: center; }
-    .badge {
-      display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap;
-    }
-    .badge.OK { background: var(--ok-fond); color: var(--ok); }
-    .badge.ALERTE { background: var(--alerte-fond); color: var(--alerte); }
-    .badge.BLOQUE { background: var(--bloque-fond); color: var(--bloque); }
-    .motifs { margin: 0; padding-left: 16px; color: var(--doux); font-size: 12px; }
-    .motifs li { margin: 2px 0; }
     .nom { font-weight: 600; }
     .sous { color: var(--doux); font-size: 12px; }
     .depasse { color: var(--bloque); font-weight: 700; }
@@ -148,7 +114,6 @@
     input[type=checkbox]:disabled { cursor: default; }
     .pied { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-top: 12px; }
     .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    .compteur { color: var(--doux); }
     .modifie { color: var(--alerte); font-weight: 600; }
     .grille { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
     h2 { font-size: 16px; margin: 0 0 12px; }
@@ -391,7 +356,7 @@
         </div>
       </div>
     </div>
-    <div class="corps" id="pCorps">
+    <div class="corps">
       <div id="pBandeau"></div>
       <div class="outils">
         <div class="segment" id="segFiltre">
@@ -569,8 +534,6 @@
       toast._t = setTimeout(function () { t.classList.remove('visible'); }, 4000);
     }
     function erreur(e) { toast('Erreur : ' + (e && e.message ? e.message : e)); }
-    var ICONES = { OK: '✅ OK', ALERTE: '⚠️ Quota', BLOQUE: '⛔ Bloqué' };
-    var ICONE_STATUT = { 'À valider': '📝', 'Validé': '🔒', 'Reporté': '⏸', 'Annulé': '✖' };
     function nomComplet(l) { return [l.prenom, l.nom].filter(Boolean).join(' '); }
     function estValide(m) { return m && m.statut === 'Validé'; }
     function cleNom(s) {
@@ -1472,8 +1435,7 @@
         adversaire: document.getElementById('nAdversaire').value.trim(),
         type: document.getElementById('nType').value,
         phase: document.getElementById('nPhase').value.trim() || '1',
-        journee: document.getElementById('nJournee').value,
-        joueurs: []
+        journee: document.getElementById('nJournee').value
       };
       if (!m.equipe) return toast('Choisissez l\'équipe (1, 2 ou 3).');
       if (!m.date) return toast('Indiquez la date.');
