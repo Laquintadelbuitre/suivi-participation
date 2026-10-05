@@ -155,7 +155,26 @@
     .rencontre .l1 .adv { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .rencontre .l2 { font-size: 12px; color: var(--doux); }
     .rencontre.barre-st .l1 .adv { text-decoration: line-through; }
+    .annot { margin-top: 5px; padding-top: 4px; border-top: 1px dashed var(--bord); display: flex; flex-direction: column; gap: 2px; }
+    .annot div { font-size: 11.5px; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .annot .bl { color: var(--bloque); }
+    .annot .al { color: var(--alerte); }
+    .annot b { font-weight: 700; }
+    .note-semaine { display: block; margin-top: 4px; font-size: 11.5px; color: var(--alerte); }
+    .interdits-panneau { margin-top: 14px; }
+    .interdits-panneau h3 { font-size: 14px; margin: 0 0 6px; }
+    .interdits-panneau .groupe { font-size: 13px; padding: 5px 0; border-top: 1px solid var(--bord); }
+    .interdits-panneau .groupe b { display: block; font-size: 12px; }
+    .interdits-panneau .bl b { color: var(--bloque); }
+    .interdits-panneau .al b { color: var(--alerte); }
     .rencontre.selection { outline: 2px solid var(--accent); }
+    .rencontre.exempt { background: repeating-linear-gradient(135deg, var(--carte) 0 8px, var(--ligne-survol) 8px 16px); }
+    .rencontre.exempt .adv { font-style: italic; color: var(--doux); }
+    .panneau.mode-exempt .outils, .panneau.mode-exempt #pJoueurs, .panneau.mode-exempt .legende-chips,
+    .panneau.mode-exempt #pMotifs, .panneau.mode-exempt #pInterdits, .panneau.mode-exempt #etatImage,
+    .panneau.mode-exempt .pied-panneau .actions { display: none; }
+    .ajouts { display: flex; gap: 4px; }
+    .ajouts .ajout-case { flex: 1; }
     .ajout-case { font: inherit; font-size: 12px; color: var(--doux); background: none; border: 1px dashed var(--bord);
       border-radius: 8px; padding: 4px; cursor: pointer; opacity: 0; }
     .case:hover .ajout-case { opacity: 1; }
@@ -269,6 +288,7 @@
         <span style="--c:var(--st-avalider)">à valider</span>
         <span style="--c:var(--st-valide)">validée</span>
         <span style="--c:var(--st-autre)">reportée / annulée</span>
+        <span style="--c:repeating-linear-gradient(135deg,var(--st-autre) 0 2px,transparent 2px 4px)">exempt</span>
         <span style="--c:transparent">★ = 2 dernières journées (règle 2)</span>
       </div>
       <div id="calendrier" class="cal"><p class="chargement">Chargement…</p></div>
@@ -343,7 +363,7 @@
         <div class="grille">
           <label>Date<input type="date" id="eDate"></label>
           <label>Adversaire<input type="text" id="eAdversaire"></label>
-          <label>Type<select id="eType"><option>Championnat</option><option>Coupe</option></select></label>
+          <label>Type<select id="eType"><option>Championnat</option><option>Coupe</option><option>Exempt</option></select></label>
           <label>Phase<input type="text" id="ePhase"></label>
           <label>Journée<input type="number" id="eJournee" min="1"></label>
           <label>Lieu<select id="eLieu"><option value="">—</option><option>Domicile</option><option>Extérieur</option></select></label>
@@ -374,6 +394,7 @@
         <b style="color:var(--st-valide)">✓</b> a joué · <b>✕</b> retire l'enfant de la feuille.
         ⛔ ne peut pas jouer · ⚠️ quota de la règle 3. L'image de convocation peut aussi être collée (⌘V) ou déposée ici.</p>
       <ul id="pMotifs" class="motifs-feuille"></ul>
+      <div id="pInterdits" class="interdits-panneau"></div>
     </div>
     <div class="pied-panneau">
       <span id="pResume" class="resume"></span>
@@ -463,7 +484,7 @@
         <label>Équipe *<select id="nEquipe"></select></label>
         <label>Date *<input type="date" id="nDate"></label>
         <label>Adversaire<input type="text" id="nAdversaire"></label>
-        <label>Type<select id="nType"><option>Championnat</option><option>Coupe</option></select></label>
+        <label>Type<select id="nType"><option>Championnat</option><option>Coupe</option><option value="Exempt">Exempt (pas de match)</option></select></label>
         <label>Phase<input type="text" id="nPhase" value="1"></label>
         <label>Journée<input type="number" id="nJournee" min="1"></label>
       </div>
@@ -775,7 +796,7 @@
     }
 
     var etat = { donnees: null, feuille: null, modifie: false, filtre: 'conv', affiches: {}, premierAffichage: true };
-    var VERSION_ATTENDUE = '2026-10-05d';
+    var VERSION_ATTENDUE = '2026-10-05f';
     var ICONE_STATUT = { 'À valider': '📝', 'Validé': '🔒', 'Reporté': '⏸', 'Annulé': '✖' };
 
     /* ---------- Dates ---------- */
@@ -846,14 +867,29 @@
           '« Importer un calendrier » pour ajouter la saison de chaque équipe.</div>';
       } else {
         cles.forEach(function (k) {
+          var actives = semaines[k].filter(function (m) { return m.statut !== 'Reporté' && m.statut !== 'Annulé' && m.type !== 'Exempt'; });
+          var absentes = eqs.filter(function (e) {
+            var joue = actives.some(function (m) { return m.equipe === e.equipe; });
+            var plusBas = actives.some(function (m) {
+              var r = eqs.find(function (x) { return x.equipe === m.equipe; });
+              return r && r.rang > e.rang;
+            });
+            return !joue && plusBas;
+          });
           html += '<div class="semaine' + (k === lundiCourant ? ' courante' : '') + '" data-semaine="' + k + '"><b>' +
-            libelleSemaine(k) + '</b>' + (k === lundiCourant ? 'cette semaine' : '') + '</div>';
+            libelleSemaine(k) + '</b>' + (k === lundiCourant ? 'cette semaine' : '') +
+            absentes.map(function (e) {
+              var ex = semaines[k].find(function (m) { return m.equipe === e.equipe && m.type === 'Exempt'; });
+              return '<span class="note-semaine">⚠️ Éq. ' + esc(e.equipe) + (ex ? ' exempte' + (ex.journee ? ' (J' + ex.journee + ')' : '') : ' ne joue pas') +
+                ' : ses joueurs du dernier match ne peuvent pas descendre (R1)</span>';
+            }).join('') + '</div>';
           eqs.forEach(function (e) {
             var ms = semaines[k].filter(function (m) { return m.equipe === e.equipe; })
               .sort(function (a, b) { return a.date < b.date ? -1 : 1; });
             html += '<div class="case">' + ms.map(function (m) { return boutonMatch(m, e); }).join('') +
-              (ms.length ? '' : '<button class="ajout-case" data-equipe="' + esc(e.equipe) + '" data-date="' +
-                ajouterJours(k, 5) + '">+ ajouter</button>') + '</div>';
+              (ms.length ? '' : '<div class="ajouts"><button class="ajout-case" data-equipe="' + esc(e.equipe) + '" data-date="' +
+                ajouterJours(k, 5) + '">+ ajouter</button><button class="ajout-case" data-exempt="1" data-equipe="' + esc(e.equipe) +
+                '" data-date="' + ajouterJours(k, 5) + '">exempt</button></div>') + '</div>';
           });
         });
         cal.innerHTML = html;
@@ -865,7 +901,8 @@
       btn.disabled = !nb;
       btn.textContent = nb ? 'Valider les feuilles passées (' + nb + ')' : 'Aucune feuille à valider';
       var valides = d.matchs.filter(function (m) { return m.statut === 'Validé'; }).length;
-      document.getElementById('resumeCal').textContent = valides + ' feuille(s) validée(s) sur ' + d.matchs.length + ' rencontre(s)';
+      var vraies = d.matchs.filter(function (m) { return m.type !== 'Exempt'; }).length;
+      document.getElementById('resumeCal').textContent = valides + ' feuille(s) validée(s) sur ' + vraies + ' rencontre(s)';
       if (etat.premierAffichage && cles.length) {
         etat.premierAffichage = false;
         var cible = cal.querySelector('.semaine.courante') ||
@@ -873,9 +910,39 @@
         if (cible) setTimeout(function () { cible.scrollIntoView({ block: 'center' }); }, 50);
       }
     }
+    // Regroupe [{nom, groupes:[…]}] par motif : { 'R1 · …': ['Sebastien', …] }
+    function grouper(liste) {
+      var g = {};
+      (liste || []).forEach(function (x) {
+        x.groupes.forEach(function (k) { (g[k] = g[k] || []).push(x.nom); });
+      });
+      return g;
+    }
+    function annotations(m) {
+      if (m.statut === 'Validé' || (!(m.interdits || []).length && !(m.alertes || []).length)) return '';
+      var lignes = [];
+      [['bl', '⛔', grouper(m.interdits)], ['al', '⚠️', grouper(m.alertes)]].forEach(function (t) {
+        Object.keys(t[2]).sort().forEach(function (k) {
+          var noms = t[2][k];
+          lignes.push('<div class="' + t[0] + '" title="' + esc(k + ' :\n' + noms.join(', ')) + '">' + t[1] + ' <b>' +
+            esc(k) + '</b> : ' + esc(noms.join(', ')) + '</div>');
+        });
+      });
+      return '<div class="annot">' + lignes.join('') + '</div>';
+    }
+    function libelleJournee(m, long) {
+      if (m.type === 'Coupe') return 'Coupe';
+      return m.journee ? 'J' + m.journee : (long ? 'Journée ?' : 'J ?');
+    }
     function boutonMatch(m, e) {
+      if (m.type === 'Exempt') {
+        return '<button class="rencontre exempt" style="--c:var(--st-autre)" data-id="' + esc(m.id) + '">' +
+          '<div class="l1"><span class="etiquette-equipe">É' + esc(e.equipe) + '</span><span class="j">' + libelleJournee(m) +
+          (m.finale ? ' ★' : '') + '</span><span class="adv">Exempt</span></div>' +
+          '<div class="l2">' + court(m.date) + ' · pas de match officiel</div></button>';
+      }
       var c = couleurMatch(m);
-      var j = m.type === 'Coupe' ? 'Coupe' : (m.journee ? 'J' + m.journee : 'J ?');
+      var j = libelleJournee(m);
       var l2 = court(m.date);
       if (m.statut === 'Reporté' || m.statut === 'Annulé') l2 += ' · ' + m.statut.toLowerCase();
       else if (m.statut === 'Validé') l2 += ' · ' + m.nbJoues + ' ont joué 🔒';
@@ -886,12 +953,13 @@
         '" style="--c:' + COULEURS[c] + '" data-id="' + esc(m.id) + '">' +
         '<div class="l1"><span class="etiquette-equipe">É' + esc(e.equipe) + '</span><span class="j">' + j +
         (m.finale ? ' ★' : '') + '</span><span class="adv">' + esc(m.adversaire || 'Adversaire ?') + '</span></div>' +
-        '<div class="l2">' + l2 + '</div></button>';
+        '<div class="l2">' + l2 + '</div>' + annotations(m) + '</button>';
     }
     document.getElementById('calendrier').addEventListener('click', function (e) {
       var b = e.target.closest('.rencontre');
       if (b) return ouvrirPanneau(b.dataset.id);
       var a = e.target.closest('.ajout-case');
+      if (a && a.dataset.exempt) return marquerExempt(a.dataset.equipe, a.dataset.date);
       if (a) ouvrirNouvelle(a.dataset.equipe, a.dataset.date);
     });
     document.getElementById('btnSuivante').addEventListener('click', function () {
@@ -979,7 +1047,7 @@
 
     function afficherPanneau() {
       var f = etat.feuille, m = f.match, verrou = estValide(m);
-      var j = m.type === 'Coupe' ? 'Coupe' : (m.journee ? 'J' + m.journee : 'Journée ?');
+      var j = libelleJournee(m, true);
       document.getElementById('pTitre').textContent = 'Équipe ' + m.equipe + ' · ' + j + ' · ' + (m.adversaire || 'Adversaire ?');
       document.getElementById('pSousTitre').textContent = long(m.date) + (m.heure ? ' · RDV ' + m.heure : '') +
         (m.lieu ? ' · ' + m.lieu : '') + ' · contrôle ' +
@@ -1002,6 +1070,16 @@
         document.getElementById(id).style.display = verrou ? 'none' : '';
       });
       document.getElementById('btnRouvrir').style.display = verrou ? '' : 'none';
+      var exempt = m.type === 'Exempt';
+      document.getElementById('panneau').classList.toggle('mode-exempt', exempt);
+      if (exempt) {
+        document.getElementById('pTitre').textContent = 'Équipe ' + m.equipe + ' · ' + libelleJournee(m, true) + ' · Exempt';
+        document.getElementById('pStatut').innerHTML = '<span class="statut autre">Exempt</span>';
+        document.getElementById('pBandeau').innerHTML = '<div class="bandeau alerte">Pas de match officiel ce jour-là pour l\'équipe ' +
+          esc(m.equipe) + '. Règle 1 : les joueurs de son dernier match ne peuvent pas jouer avec une équipe inférieure ce week-end.</div>';
+        document.getElementById('pResume').textContent = '';
+        return;
+      }
       afficherJoueurs();
     }
 
@@ -1082,6 +1160,23 @@
           return 'Règle ' + x.regle + ' : ' + esc(x.message);
         }).join(' · ') + '</li>';
       }).join('');
+      var interdits = f.lignes.filter(function (l) { return l.niveau === 'BLOQUE'; });
+      var alertes = f.lignes.filter(function (l) { return l.niveau !== 'BLOQUE' && l.motifs.length; });
+      var bloc = function (liste, cl, icone) {
+        var g = {};
+        liste.forEach(function (l) {
+          l.motifs.forEach(function (x) {
+            if (!x.groupe || (cl === 'bl') !== (x.niveau === 'BLOQUE')) return;
+            (g[x.groupe] = g[x.groupe] || []).push(nomComplet(l));
+          });
+        });
+        return Object.keys(g).sort().map(function (k) {
+          var noms = g[k].filter(function (n, i, a) { return a.indexOf(n) === i; });
+          return '<div class="groupe ' + cl + '"><b>' + icone + ' ' + esc(k) + ' (' + noms.length + ')</b>' + esc(noms.join(', ')) + '</div>';
+        }).join('');
+      };
+      document.getElementById('pInterdits').innerHTML = verrou || (!interdits.length && !alertes.length) ? '' :
+        '<h3>Pour ce match (' + interdits.length + ' ne peuvent pas jouer)</h3>' + bloc(interdits, 'bl', '⛔') + bloc(interdits.concat(alertes), 'al', '⚠️');
       document.getElementById('pResume').innerHTML = '<b>' + sur.length + '</b> convoqué(s) · <b>' + entres.length +
         '</b> ont joué' + (etat.modifie ? ' · <span class="modifie">non enregistré</span>' : '') +
         (verrou && m.valideLe ? ' · validée le ' + esc(fr(m.valideLe)) : '');
@@ -1372,7 +1467,7 @@
     }
     // Équipe : celle du calendrier qui joue ce jour-là contre cet adversaire, sinon le n° d'équipe FFF
     function equipeProbable(f) {
-      var ms = (etat.donnees.matchs || []).filter(function (x) { return x.date === f.date && x.statut !== 'Annulé'; });
+      var ms = (etat.donnees.matchs || []).filter(function (x) { return x.date === f.date && x.statut !== 'Annulé' && x.type !== 'Exempt'; });
       var mots = cleNom(f.adversaire).split(' ').filter(function (w) { return w.length >= 4 && !/^(limoges|football|club|sport)/.test(w); });
       var memeAdv = ms.filter(function (x) {
         var a = cleNom(x.adversaire);
@@ -1465,6 +1560,19 @@
     document.getElementById('btnAppliquerFFF').addEventListener('click', function () { appliquerFFF(false); });
     document.getElementById('btnValiderFFF').addEventListener('click', function () { appliquerFFF(true); });
 
+    // Exempt en un clic : journée = celle qui suit la dernière journée connue de l'équipe
+    function marquerExempt(equipe, date) {
+      var avant = etat.donnees.matchs.filter(function (m) {
+        return m.equipe === equipe && m.date < date && m.journee && (m.type === 'Championnat' || m.type === 'Exempt');
+      }).sort(function (a, b) { return a.date < b.date ? 1 : -1; })[0];
+      var j = window.prompt('Équipe ' + equipe + ' exempte le week-end du ' + fr(date) + '. Numéro de journée :',
+        avant ? String(avant.journee + 1) : '');
+      if (j === null) return;
+      appel('ajouterMatch', { equipe: equipe, date: date, type: 'Exempt', journee: j, phase: avant ? avant.phase : '' })
+        .then(function (d) { recevoirDonnees(d); toast('Équipe ' + equipe + ' exempte' + (j ? ' (J' + j + ')' : '') + '.'); })
+        .catch(erreur);
+    }
+
     /* ---------- Nouvelle rencontre ---------- */
     function ouvrirNouvelle(equipe, date) {
       document.getElementById('nEquipe').innerHTML = optionsEquipesSelect(true);
@@ -1502,7 +1610,10 @@
       try { var v = JSON.parse(localStorage.getItem('calendrier') || '[]'); return Array.isArray(v) ? v : []; }
       catch (e) { return []; }
     }
-    function typeDepuisTexte(t) { return /coupe|challenge|tournoi|plateau|amical|festival/i.test(t || '') ? 'Coupe' : 'Championnat'; }
+    function typeDepuisTexte(t) {
+      if (/exempt/i.test(t || '')) return 'Exempt';
+      return /coupe|challenge|tournoi|plateau|amical|festival/i.test(t || '') ? 'Coupe' : 'Championnat';
+    }
     function ouvrirImport() {
       document.getElementById('iEquipe').innerHTML = optionsEquipesSelect(true);
       document.getElementById('iPhaseImp').value = '1';
@@ -1559,7 +1670,7 @@
       importLignes.sort(function (a, b) { return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); });
       var n = Number(document.getElementById('iPremiere').value) || 1;
       importLignes.forEach(function (l) {
-        if (!l.inclure || l.type !== 'Championnat') return;
+        if (!l.inclure || l.type === 'Coupe') return;
         if (l.journeeSource && !tout) { n = Number(l.journee) + 1; return; }
         l.journee = n++;
       });
@@ -1678,9 +1789,10 @@
             '<td><input type="date" data-k="date" value="' + esc(l.date) + '"></td>' +
             '<td><input type="text" data-k="adversaire" value="' + esc(l.adversaire) + '"></td>' +
             '<td><select data-k="type"><option' + (l.type === 'Championnat' ? ' selected' : '') + '>Championnat</option>' +
-            '<option value="Coupe"' + (l.type === 'Coupe' ? ' selected' : '') + '>Coupe / autre</option></select></td>' +
-            '<td><input type="number" class="j" data-k="journee" min="1" value="' + esc(l.type === 'Championnat' ? l.journee : '') + '"' +
-            (l.type === 'Championnat' ? '' : ' disabled') + '></td>' +
+            '<option value="Coupe"' + (l.type === 'Coupe' ? ' selected' : '') + '>Coupe / autre</option>' +
+            '<option' + (l.type === 'Exempt' ? ' selected' : '') + '>Exempt</option></select></td>' +
+            '<td><input type="number" class="j" data-k="journee" min="1" value="' + esc(l.type !== 'Coupe' ? l.journee : '') + '"' +
+            (l.type !== 'Coupe' ? '' : ' disabled') + '></td>' +
             '<td><select data-k="lieu"><option value=""' + (!l.lieu ? ' selected' : '') + '>—</option><option' +
             (l.lieu === 'Domicile' ? ' selected' : '') + '>Domicile</option><option' + (l.lieu === 'Extérieur' ? ' selected' : '') +
             '>Extérieur</option></select></td>' +
@@ -1710,7 +1822,7 @@
       if (!eq) return toast('Choisissez l\'équipe.');
       var phase = document.getElementById('iPhaseImp').value.trim() || '1';
       var lignes = importLignes.filter(function (l) { return l.inclure && l.date; }).map(function (l) {
-        return { date: l.date, adversaire: l.adversaire, type: l.type, journee: l.type === 'Championnat' ? l.journee : '',
+        return { date: l.date, adversaire: l.type === 'Exempt' ? '' : l.adversaire, type: l.type, journee: l.type !== 'Coupe' ? l.journee : '',
           phase: phase, lieu: l.lieu, heure: l.heure };
       });
       var btn = this;
