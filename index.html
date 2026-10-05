@@ -119,7 +119,7 @@
     h2 { font-size: 16px; margin: 0 0 12px; }
     .legende { color: var(--doux); font-size: 12px; margin-top: 8px; }
     #toast {
-      position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
+      position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 100;
       background: var(--texte); color: var(--fond); padding: 10px 16px; border-radius: 8px;
       opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100% - 32px);
     }
@@ -431,17 +431,16 @@
         <h2 style="margin:0">Feuille de match FFF</h2>
         <button class="fermer" id="btnFermerFFF">✕</button>
       </div>
-      <div class="outils" style="margin-top:10px">
-        <input type="text" id="fffLien" placeholder="https://epreuves.fff.fr/competition/match/…" style="flex:1;min-width:220px">
-        <button class="bouton" id="btnLireFFF">Lire</button>
-      </div>
-      <div id="fffSecours" style="display:none">
-        <p class="bandeau alerte" style="font-weight:400">Le site de la FFF n'a pas accepté la lecture automatique.
-          Ouvrez le lien (<a href="#" id="fffOuvrir" target="_blank" rel="noopener">ouvrir la page FFF</a>), sélectionnez
-          tout (⌘A / Ctrl+A), copiez (⌘C / Ctrl+C), puis collez ci-dessous.</p>
-        <textarea id="fffTexte" rows="5" style="width:100%" placeholder="Coller ici le contenu de la page FFF"></textarea>
-        <button class="bouton secondaire petit" id="btnAnalyserFFF">Lire le texte collé</button>
-      </div>
+      <p class="sous" style="margin:8px 0 6px">Sur la page du match (epreuves.fff.fr) : tout sélectionner (⌘A / Ctrl+A),
+        copier (⌘C / Ctrl+C), puis coller ici (⌘V / Ctrl+V). La lecture est immédiate.</p>
+      <textarea id="fffTexte" rows="4" style="width:100%" placeholder="Coller ici le contenu de la page FFF du match"></textarea>
+      <details style="margin-top:6px">
+        <summary class="sous" style="cursor:pointer">Ou essayer avec le lien du match</summary>
+        <div class="outils" style="margin-top:6px">
+          <input type="text" id="fffLien" placeholder="https://epreuves.fff.fr/competition/match/…" style="flex:1;min-width:220px">
+          <button class="bouton secondaire petit" id="btnLireFFF">Lire le lien</button>
+        </div>
+      </details>
       <div id="fffResultat"></div>
       <div class="pied">
         <span class="sous" id="fffResume"></span>
@@ -1247,13 +1246,12 @@
       fffMatchId = depuisPanneau && etat.feuille ? etat.feuille.match.id : null;
       document.getElementById('fffLien').value = '';
       document.getElementById('fffTexte').value = '';
-      document.getElementById('fffSecours').style.display = 'none';
       document.getElementById('fffResultat').innerHTML = '';
       document.getElementById('fffResume').textContent = fffMatchId
         ? 'Pour la rencontre ouverte : ' + document.getElementById('pTitre').textContent : '';
       majBoutonsFFF();
       document.getElementById('modaleFFF').classList.add('ouverte');
-      document.getElementById('fffLien').focus();
+      document.getElementById('fffTexte').focus();
     }
     document.getElementById('btnFFF').addEventListener('click', function () { ouvrirFFF(false); });
     document.getElementById('btnFFFPanneau').addEventListener('click', function () {
@@ -1275,42 +1273,76 @@
       }).catch(function (e) {
         var msg = e && e.message ? e.message : String(e);
         if (/FFF_INACCESSIBLE/.test(msg)) {
-          document.getElementById('fffSecours').style.display = '';
-          document.getElementById('fffOuvrir').href = /^https?:/.test(lien) ? lien : 'https://epreuves.fff.fr/';
+          toast('La FFF refuse la lecture du lien : copiez-collez la page dans la zone prévue.');
+          document.getElementById('fffTexte').focus();
         } else erreur(e);
-      }).then(function () { btn.disabled = false; btn.textContent = 'Lire'; });
+      }).then(function () { btn.disabled = false; btn.textContent = 'Lire le lien'; });
     }
 
-    // Secours : texte copié depuis la page FFF (« 1 SEBASTIEN P. », titulaires puis remplaçants)
-    document.getElementById('btnAnalyserFFF').addEventListener('click', function () {
-      var club = cleNom((etat.donnees.clubFFF || 'LIMOGES FOOTBALL'));
-      var lignes = document.getElementById('fffTexte').value.split(/\n/).map(function (l) { return l.replace(/\t/g, ' ').trim(); })
-        .filter(Boolean);
-      var debut = -1;
-      lignes.forEach(function (l, i) {
-        if (cleNom(l) === club && lignes[i + 1] && /^titulaires/i.test(lignes[i + 1])) debut = i;
+    // Secours : texte copié depuis la page FFF (en-tête du match, puis « COMPOSITION » : une équipe par bloc)
+    var MOIS_FFF = { janv: 1, fevr: 2, mars: 3, avr: 4, mai: 5, juin: 6, juil: 7, aout: 8, sept: 9, oct: 10, nov: 11, dec: 12 };
+    function analyserTexteFFF(texte) {
+      var club = cleNom(etat.donnees.clubFFF || 'LIMOGES FOOTBALL');
+      var lignes = texte.split(/\n/).map(function (l) { return l.replace(/\t/g, ' ').trim(); }).filter(Boolean);
+      var r = { date: '', journee: '', phase: '', type: 'Championnat', equipeFFF: '', adversaire: '', domicile: undefined, joueurs: [] };
+      // En-tête : « SAM 03 OCT 2026 - 14H00 » et « U13 Départemental 2 - U13 - U12 Journée 4 »
+      lignes.some(function (l) {
+        var m = cleNom(l).match(/\b(\d{1,2}) (janv|fevr|mars|avr|mai|juin|juil|aout|sept|oct|nov|dec)[a-z]* (\d{4})\b/);
+        if (!m) return false;
+        r.date = m[3] + '-' + String(MOIS_FFF[m[2]]).padStart(2, '0') + '-' + String(m[1]).padStart(2, '0');
+        return true;
       });
-      if (debut === -1) return toast('Composition de « ' + (etat.donnees.clubFFF || 'LIMOGES FOOTBALL') + ' » introuvable dans le texte.');
-      var joueurs = [], titulaire = true, maillot = '';
-      for (var i = debut + 1; i < lignes.length; i++) {
+      lignes.some(function (l) {
+        var m = l.match(/journ[ée]e\s*(\d{1,2})/i);
+        if (m) { r.journee = +m[1]; if (/coupe|challenge/i.test(l)) r.type = 'Coupe'; return true; }
+        if (/coupe|challenge/i.test(l) && /U1\d/.test(l)) { r.type = 'Coupe'; return true; }
+        return false;
+      });
+      // Blocs de composition : nom de l'équipe suivi de « TITULAIRES »
+      var blocs = [];
+      lignes.forEach(function (l, i) {
+        if (lignes[i + 1] && /^titulaires/i.test(lignes[i + 1]) && !/^logo/i.test(l)) blocs.push({ nom: l, i: i });
+      });
+      var nous = -1;
+      blocs.forEach(function (b, k) {
+        var n = cleNom(b.nom);
+        if (n === club || (n.indexOf(club + ' ') === 0 && /^\d+$/.test(n.slice(club.length + 1)))) nous = k;
+      });
+      if (nous === -1) return null;
+      var suffixe = cleNom(blocs[nous].nom).slice(club.length).trim();
+      r.equipeFFF = suffixe || '1';
+      r.domicile = nous === 0;
+      var autre = blocs[nous === 0 ? 1 : 0];
+      if (autre) r.adversaire = autre.nom;
+      var titulaire = true, maillot = '';
+      for (var i = blocs[nous].i + 1; i < lignes.length; i++) {
         var l = lignes[i], m;
         if (/^titulaires/i.test(l)) { titulaire = true; continue; }
         if (/^rempla/i.test(l)) { titulaire = false; continue; }
         if (/^\d{1,2}$/.test(l)) { maillot = +l; continue; }
         if ((m = l.match(/^(?:(\d{1,2})\s+)?([A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý' \-]*?)\s+([A-Z])\.$/))) {
-          joueurs.push({ prenom: m[2], initiale: m[3] + '.', idFFF: '', maillot: m[1] ? +m[1] : maillot, titulaire: titulaire });
+          r.joueurs.push({ prenom: m[2], initiale: m[3] + '.', idFFF: '', maillot: m[1] ? +m[1] : maillot, titulaire: titulaire });
           maillot = '';
           continue;
         }
         break;
       }
-      if (!joueurs.length) return toast('Aucun joueur reconnu dans le texte collé.');
-      var lien = document.getElementById('fffLien').value.trim();
-      var mo = lien.match(/match\/(\d+)/);
-      fff = { lien: mo ? 'https://epreuves.fff.fr/competition/match/' + mo[1] + '/match' : '', date: '', journee: '', phase: '',
-        type: 'Championnat', equipeFFF: '', adversaire: '', joueurs: joueurs, depuisTexte: true };
+      return r;
+    }
+    function lireTexteFFF() {
+      var texte = document.getElementById('fffTexte').value;
+      if (!texte.trim()) return;
+      var r = analyserTexteFFF(texte);
+      if (!r) return toast('Composition de « ' + (etat.donnees.clubFFF || 'LIMOGES FOOTBALL') + ' » introuvable dans le texte.');
+      if (!r.joueurs.length) return toast('Aucun joueur reconnu dans le texte collé.');
+      var mo = document.getElementById('fffLien').value.trim().match(/match\/(\d+)/);
+      r.lien = mo ? 'https://epreuves.fff.fr/competition/match/' + mo[1] + '/match' : '';
+      r.depuisTexte = true;
+      fff = r;
       afficherFFF();
-    });
+    }
+    document.getElementById('fffTexte').addEventListener('paste', function () { setTimeout(lireTexteFFF, 0); });
+    document.getElementById('fffTexte').addEventListener('change', lireTexteFFF);
 
     function correspondances(joueursFFF) {
       var roster = (etat.donnees.joueurs || []);
@@ -1338,13 +1370,25 @@
         return { choix: '__nouveau', niveau: 'nouveau' };
       });
     }
+    // Équipe : celle du calendrier qui joue ce jour-là contre cet adversaire, sinon le n° d'équipe FFF
+    function equipeProbable(f) {
+      var ms = (etat.donnees.matchs || []).filter(function (x) { return x.date === f.date && x.statut !== 'Annulé'; });
+      var mots = cleNom(f.adversaire).split(' ').filter(function (w) { return w.length >= 4 && !/^(limoges|football|club|sport)/.test(w); });
+      var memeAdv = ms.filter(function (x) {
+        var a = cleNom(x.adversaire);
+        return mots.some(function (w) { return a.indexOf(w) !== -1; });
+      });
+      if (memeAdv.length === 1) return memeAdv[0].equipe;
+      if (ms.length === 1) return ms[0].equipe;
+      return equipesTriees().some(function (e) { return e.equipe === f.equipeFFF; }) ? f.equipeFFF : '';
+    }
     function capitaliser(s) {
       return String(s || '').toLowerCase().replace(/(^|[\s\-'])([a-zà-ÿ])/g, function (_, a, b) { return a + b.toUpperCase(); });
     }
     function afficherFFF() {
       var d = etat.donnees, m = fffMatchId && etat.feuille ? etat.feuille.match : null;
       var eqs = equipesTriees();
-      var equipe = m ? m.equipe : (eqs.some(function (e) { return e.equipe === fff.equipeFFF; }) ? fff.equipeFFF : '');
+      var equipe = m ? m.equipe : equipeProbable(fff);
       var corr = correspondances(fff.joueurs);
       var options = function (sel) {
         return '<option value="__nouveau"' + (sel === '__nouveau' ? ' selected' : '') + '>➕ Nouveau joueur</option>' +
@@ -1357,7 +1401,7 @@
         nouveau: '<span class="fff-nouveau" title="Pas trouvé dans l\'effectif">➕</span>' };
       document.getElementById('fffResultat').innerHTML =
         (fff.adversaire ? '<p><b>' + (fff.type === 'Coupe' ? 'Coupe' : 'J' + (fff.journee || '?')) + ' · ' + esc(fr(fff.date)) + ' · ' +
-          (fff.domicile ? 'reçoit ' : 'chez ') + esc(fff.adversaire) + '</b> <span class="sous">(score ' + esc(fff.score) + ')</span></p>' : '') +
+          (fff.domicile ? 'reçoit ' : 'chez ') + esc(fff.adversaire) + '</b>' + (fff.score ? ' <span class="sous">(score ' + esc(fff.score) + ')</span>' : '') + '</p>' : '') +
         '<div class="grille">' +
         '<label>Équipe *<select id="fffEquipe"' + (m ? ' disabled' : '') + '>' + optionsEquipesSelect(true) + '</select></label>' +
         '<label>Date *<input type="date" id="fffDate" value="' + esc(m ? m.date : fff.date) + '"' + (m ? ' disabled' : '') + '></label>' +
@@ -1382,8 +1426,12 @@
     }
     function appliquerFFF(valider) {
       var equipe = document.getElementById('fffEquipe').value, date = document.getElementById('fffDate').value;
-      if (!equipe) return toast('Choisissez l\'équipe (1, 2 ou 3).');
-      if (!date) return toast('Indiquez la date du match.');
+      var manque = !equipe ? 'Choisissez l\'équipe (1, 2 ou 3).' : (!date ? 'Indiquez la date du match.' : '');
+      document.getElementById('fffEquipe').style.borderColor = !equipe ? 'var(--bloque)' : '';
+      if (manque) {
+        document.getElementById('fffResume').innerHTML = '<b style="color:var(--bloque)">⛔ ' + manque + '</b>';
+        return toast(manque);
+      }
       var vus = {}, doublon = null;
       var joueurs = [];
       document.querySelectorAll('#fffResultat tr[data-i]').forEach(function (tr) {
