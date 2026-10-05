@@ -268,6 +268,9 @@
     .apercu-import td, .apercu-import th { padding: 4px 6px; }
     .apercu-import input[type=text], .apercu-import input[type=number], .apercu-import input[type=date], .apercu-import select { padding: 4px 6px; font-size: 13px; }
     .apercu-import input.j { width: 58px; }
+    .fff-table select { width: 100%; padding: 5px 8px; }
+    .fff-table td { vertical-align: middle; }
+    .fff-sur { color: var(--ok); } .fff-propose { color: var(--alerte); } .fff-nouveau { color: var(--accent); }
   </style>
 </head>
 <body>
@@ -290,6 +293,7 @@
           <span id="resumeCal" class="resume"></span>
         </div>
         <div class="groupe">
+          <button class="bouton secondaire" id="btnFFF">🔗 Feuille FFF</button>
           <button class="bouton secondaire" id="btnImporter">Importer un calendrier</button>
           <button class="bouton secondaire" id="btnNouvelle">+ Rencontre</button>
         </div>
@@ -396,6 +400,7 @@
         </div>
         <button class="bouton secondaire petit" id="btnImage" title="Lire la liste des convoqués sur l'image de la convocation">📷 Image</button>
         <input type="file" id="fImage" accept="image/*" hidden>
+        <button class="bouton secondaire petit" id="btnFFFPanneau" title="Remplir avec la composition publiée sur epreuves.fff.fr">🔗 FFF</button>
         <button class="bouton secondaire petit" id="btnTousJoue" title="Tous les convoqués passent en « a joué »">✓ Tous ont joué</button>
       </div>
       <span id="etatImage" class="etat-image" style="margin:-4px 0 8px"></span>
@@ -450,6 +455,35 @@
       <div class="pied">
         <span class="sous" id="resumeImport"></span>
         <button class="bouton" id="btnConfirmerImport" disabled>Importer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ FEUILLE FFF ============ -->
+  <div id="modaleFFF" class="modale">
+    <div class="boite">
+      <div class="pied" style="margin-top:0">
+        <h2 style="margin:0">Feuille de match FFF</h2>
+        <button class="fermer" id="btnFermerFFF">✕</button>
+      </div>
+      <div class="outils" style="margin-top:10px">
+        <input type="text" id="fffLien" placeholder="https://epreuves.fff.fr/competition/match/…" style="flex:1;min-width:220px">
+        <button class="bouton" id="btnLireFFF">Lire</button>
+      </div>
+      <div id="fffSecours" style="display:none">
+        <p class="bandeau alerte" style="font-weight:400">Le site de la FFF n'a pas accepté la lecture automatique.
+          Ouvrez le lien (<a href="#" id="fffOuvrir" target="_blank" rel="noopener">ouvrir la page FFF</a>), sélectionnez
+          tout (⌘A / Ctrl+A), copiez (⌘C / Ctrl+C), puis collez ci-dessous.</p>
+        <textarea id="fffTexte" rows="5" style="width:100%" placeholder="Coller ici le contenu de la page FFF"></textarea>
+        <button class="bouton secondaire petit" id="btnAnalyserFFF">Lire le texte collé</button>
+      </div>
+      <div id="fffResultat"></div>
+      <div class="pied">
+        <span class="sous" id="fffResume"></span>
+        <span class="actions">
+          <button class="bouton secondaire" id="btnAppliquerFFF" disabled>Enregistrer</button>
+          <button class="bouton valider" id="btnValiderFFF" disabled>Enregistrer et valider</button>
+        </span>
       </div>
     </div>
   </div>
@@ -576,7 +610,8 @@
       SEUIL_MATCHS_SUP: 'Règle 3 : seuil de matchs en équipe sup.',
       MAX_HABITUES: 'Règle 3 : maximum de ces joueurs par feuille',
       NON_VALIDEES: 'Feuilles non validées',
-      PHASE_COURANTE: 'Phase courante (feuilles reçues)'
+      PHASE_COURANTE: 'Phase courante (feuilles reçues)',
+      CLUB_FFF: 'Nom du club sur le site FFF'
     };
     var equipesParam = [];
     function optionsEquipes(sel) {
@@ -778,7 +813,7 @@
     }
 
     var etat = { donnees: null, feuille: null, modifie: false, filtre: 'conv', affiches: {}, premierAffichage: true };
-    var VERSION_ATTENDUE = '2026-10-05c';
+    var VERSION_ATTENDUE = '2026-10-05d';
     var ICONE_STATUT = { 'À valider': '📝', 'Validé': '🔒', 'Reporté': '⏸', 'Annulé': '✖' };
 
     /* ---------- Dates ---------- */
@@ -1001,7 +1036,7 @@
       document.getElementById('eStatut').value = m.statut === 'Reporté' || m.statut === 'Annulé' ? m.statut : 'À valider';
       document.getElementById('lienModifier').style.display = verrou ? 'none' : '';
       if (verrou) document.getElementById('edition').classList.remove('ouverte');
-      ['btnImage', 'btnTousJoue', 'btnEnregistrer', 'btnValider'].forEach(function (id) {
+      ['btnImage', 'btnFFFPanneau', 'btnTousJoue', 'btnEnregistrer', 'btnValider'].forEach(function (id) {
         document.getElementById(id).style.display = verrou ? 'none' : '';
       });
       document.getElementById('btnRouvrir').style.display = verrou ? '' : 'none';
@@ -1240,6 +1275,184 @@
         return '<option value="' + esc(e.equipe) + '">Équipe ' + esc(e.equipe) + (e.niveau ? ' (' + esc(e.niveau) + ')' : '') + '</option>';
       }).join('');
     }
+
+
+    /* ---------- Feuille FFF (epreuves.fff.fr) ---------- */
+    var fff = null, fffMatchId = null;
+    function ouvrirFFF(depuisPanneau) {
+      fff = null;
+      fffMatchId = depuisPanneau && etat.feuille ? etat.feuille.match.id : null;
+      document.getElementById('fffLien').value = '';
+      document.getElementById('fffTexte').value = '';
+      document.getElementById('fffSecours').style.display = 'none';
+      document.getElementById('fffResultat').innerHTML = '';
+      document.getElementById('fffResume').textContent = fffMatchId
+        ? 'Pour la rencontre ouverte : ' + document.getElementById('pTitre').textContent : '';
+      majBoutonsFFF();
+      document.getElementById('modaleFFF').classList.add('ouverte');
+      document.getElementById('fffLien').focus();
+    }
+    document.getElementById('btnFFF').addEventListener('click', function () { ouvrirFFF(false); });
+    document.getElementById('btnFFFPanneau').addEventListener('click', function () {
+      if (etat.modifie && !confirm('Les cases non enregistrées seront remplacées par la feuille FFF. Continuer ?')) return;
+      ouvrirFFF(true);
+    });
+    document.getElementById('btnFermerFFF').addEventListener('click', fermerModales);
+    document.getElementById('fffLien').addEventListener('keydown', function (e) { if (e.key === 'Enter') lireFFF(); });
+    document.getElementById('btnLireFFF').addEventListener('click', lireFFF);
+    function lireFFF() {
+      var lien = document.getElementById('fffLien').value.trim();
+      if (!lien) return toast('Collez le lien du match FFF.');
+      var btn = document.getElementById('btnLireFFF');
+      btn.disabled = true;
+      btn.textContent = 'Lecture…';
+      appel('lireFeuilleFFF', lien).then(function (r) {
+        fff = r;
+        afficherFFF();
+      }).catch(function (e) {
+        var msg = e && e.message ? e.message : String(e);
+        if (/FFF_INACCESSIBLE/.test(msg)) {
+          document.getElementById('fffSecours').style.display = '';
+          document.getElementById('fffOuvrir').href = /^https?:/.test(lien) ? lien : 'https://epreuves.fff.fr/';
+        } else erreur(e);
+      }).then(function () { btn.disabled = false; btn.textContent = 'Lire'; });
+    }
+
+    // Secours : texte copié depuis la page FFF (« 1 SEBASTIEN P. », titulaires puis remplaçants)
+    document.getElementById('btnAnalyserFFF').addEventListener('click', function () {
+      var club = cleNom((etat.donnees.clubFFF || 'LIMOGES FOOTBALL'));
+      var lignes = document.getElementById('fffTexte').value.split(/\n/).map(function (l) { return l.replace(/\t/g, ' ').trim(); })
+        .filter(Boolean);
+      var debut = -1;
+      lignes.forEach(function (l, i) {
+        if (cleNom(l) === club && lignes[i + 1] && /^titulaires/i.test(lignes[i + 1])) debut = i;
+      });
+      if (debut === -1) return toast('Composition de « ' + (etat.donnees.clubFFF || 'LIMOGES FOOTBALL') + ' » introuvable dans le texte.');
+      var joueurs = [], titulaire = true, maillot = '';
+      for (var i = debut + 1; i < lignes.length; i++) {
+        var l = lignes[i], m;
+        if (/^titulaires/i.test(l)) { titulaire = true; continue; }
+        if (/^rempla/i.test(l)) { titulaire = false; continue; }
+        if (/^\d{1,2}$/.test(l)) { maillot = +l; continue; }
+        if ((m = l.match(/^(?:(\d{1,2})\s+)?([A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý' \-]*?)\s+([A-Z])\.$/))) {
+          joueurs.push({ prenom: m[2], initiale: m[3] + '.', idFFF: '', maillot: m[1] ? +m[1] : maillot, titulaire: titulaire });
+          maillot = '';
+          continue;
+        }
+        break;
+      }
+      if (!joueurs.length) return toast('Aucun joueur reconnu dans le texte collé.');
+      var lien = document.getElementById('fffLien').value.trim();
+      var mo = lien.match(/match\/(\d+)/);
+      fff = { lien: mo ? 'https://epreuves.fff.fr/competition/match/' + mo[1] + '/match' : '', date: '', journee: '', phase: '',
+        type: 'Championnat', equipeFFF: '', adversaire: '', joueurs: joueurs, depuisTexte: true };
+      afficherFFF();
+    });
+
+    function correspondances(joueursFFF) {
+      var roster = (etat.donnees.joueurs || []);
+      var pris = {};
+      return joueursFFF.map(function (j) {
+        var sur = j.idFFF && roster.find(function (r) { return r.idFFF && r.idFFF === j.idFFF; });
+        if (sur) { pris[sur.licence] = true; return { choix: sur.licence, niveau: 'sur' }; }
+        var mots = cleNom(j.prenom).split(' ');
+        var cands = roster.filter(function (r) {
+          if (pris[r.licence]) return false;
+          var c = cleNom(r.prenom).split(' ');
+          if (c.length > mots.length + 1) return false;
+          for (var k = 0; k < Math.min(c.length, mots.length); k++) if (!motsProches(c[k], mots[k])) return false;
+          return c.length === mots.length || (c.length === mots.length + 1 && c[c.length - 1].length === 1);
+        });
+        var ini = cleNom(j.initiale).charAt(0);
+        if (cands.length > 1 && ini) {
+          var f = cands.filter(function (r) {
+            var n = cleNom(r.nom || r.prenom.split(' ').slice(1).join(' '));
+            return n && n.charAt(0) === ini;
+          });
+          if (f.length) cands = f;
+        }
+        if (cands.length === 1) { pris[cands[0].licence] = true; return { choix: cands[0].licence, niveau: 'propose' }; }
+        return { choix: '__nouveau', niveau: 'nouveau' };
+      });
+    }
+    function capitaliser(s) {
+      return String(s || '').toLowerCase().replace(/(^|[\s\-'])([a-zà-ÿ])/g, function (_, a, b) { return a + b.toUpperCase(); });
+    }
+    function afficherFFF() {
+      var d = etat.donnees, m = fffMatchId && etat.feuille ? etat.feuille.match : null;
+      var eqs = equipesTriees();
+      var equipe = m ? m.equipe : (eqs.some(function (e) { return e.equipe === fff.equipeFFF; }) ? fff.equipeFFF : '');
+      var corr = correspondances(fff.joueurs);
+      var options = function (sel) {
+        return '<option value="__nouveau"' + (sel === '__nouveau' ? ' selected' : '') + '>➕ Nouveau joueur</option>' +
+          '<option value="__ignorer">— ignorer —</option>' +
+          d.joueurs.map(function (r) {
+            return '<option value="' + esc(r.licence) + '"' + (r.licence === sel ? ' selected' : '') + '>' + esc(nomComplet(r)) + '</option>';
+          }).join('');
+      };
+      var NIV = { sur: '<span class="fff-sur" title="Déjà associé">✅</span>', propose: '<span class="fff-propose" title="Proposé d\'après le prénom : vérifiez">🟡</span>',
+        nouveau: '<span class="fff-nouveau" title="Pas trouvé dans l\'effectif">➕</span>' };
+      document.getElementById('fffResultat').innerHTML =
+        (fff.adversaire ? '<p><b>' + (fff.type === 'Coupe' ? 'Coupe' : 'J' + (fff.journee || '?')) + ' · ' + esc(fr(fff.date)) + ' · ' +
+          (fff.domicile ? 'reçoit ' : 'chez ') + esc(fff.adversaire) + '</b> <span class="sous">(score ' + esc(fff.score) + ')</span></p>' : '') +
+        '<div class="grille">' +
+        '<label>Équipe *<select id="fffEquipe"' + (m ? ' disabled' : '') + '>' + optionsEquipesSelect(true) + '</select></label>' +
+        '<label>Date *<input type="date" id="fffDate" value="' + esc(m ? m.date : fff.date) + '"' + (m ? ' disabled' : '') + '></label>' +
+        '<label>Journée<input type="number" id="fffJournee" min="1" value="' + esc(fff.journee || (m && m.journee) || '') + '"></label>' +
+        '<label>Phase<input type="text" id="fffPhase" value="' + esc(fff.phase || (m && m.phase) || '1') + '"></label>' +
+        '</div>' +
+        '<div class="apercu-import"><table class="fff-table"><thead><tr><th>N°</th><th>Sur la feuille FFF</th><th></th>' +
+        '<th>Dans l\'effectif</th></tr></thead><tbody>' + fff.joueurs.map(function (j, i) {
+          return '<tr data-i="' + i + '"><td>' + esc(j.maillot) + '</td><td><b>' + esc(j.prenom + ' ' + j.initiale) + '</b>' +
+            (j.titulaire ? '' : ' <span class="sous">remplaçant</span>') + '</td><td>' + NIV[corr[i].niveau] + '</td>' +
+            '<td><select class="fff-choix">' + options(corr[i].choix) + '</select></td></tr>';
+        }).join('') + '</tbody></table></div>' +
+        '<p class="legende">✅ déjà associé · 🟡 proposé d\'après le prénom (à vérifier) · ➕ sera ajouté à l\'effectif. ' +
+        'Tous les joueurs de la feuille FFF seront cochés « a joué » : la FFF considère comme ayant participé tout joueur inscrit ' +
+        'sur la feuille de match (titulaire ou remplaçant). Les associations sont mémorisées pour les prochaines feuilles.</p>';
+      document.getElementById('fffEquipe').value = equipe;
+      document.getElementById('fffResume').textContent = fff.joueurs.length + ' joueur(s) sur la feuille FFF.';
+      majBoutonsFFF();
+    }
+    function majBoutonsFFF() {
+      ['btnAppliquerFFF', 'btnValiderFFF'].forEach(function (id) { document.getElementById(id).disabled = !fff; });
+    }
+    function appliquerFFF(valider) {
+      var equipe = document.getElementById('fffEquipe').value, date = document.getElementById('fffDate').value;
+      if (!equipe) return toast('Choisissez l\'équipe (1, 2 ou 3).');
+      if (!date) return toast('Indiquez la date du match.');
+      var vus = {}, doublon = null;
+      var joueurs = [];
+      document.querySelectorAll('#fffResultat tr[data-i]').forEach(function (tr) {
+        var j = fff.joueurs[+tr.dataset.i], v = tr.querySelector('.fff-choix').value;
+        if (v === '__ignorer') return;
+        if (v === '__nouveau') {
+          joueurs.push({ nouveau: { prenom: capitaliser(j.prenom), nom: j.initiale }, idFFF: j.idFFF });
+        } else {
+          if (vus[v]) doublon = v;
+          vus[v] = true;
+          joueurs.push({ licence: v, idFFF: j.idFFF });
+        }
+      });
+      if (doublon) return toast('« ' + doublon + ' » est associé à deux joueurs FFF.');
+      var p = {
+        matchId: fffMatchId, equipe: equipe, date: date,
+        journee: document.getElementById('fffJournee').value, phase: document.getElementById('fffPhase').value.trim(),
+        type: fff.type, adversaire: fff.adversaire ? capitaliser(fff.adversaire) : '', lien: fff.lien,
+        domicile: fff.adversaire ? !!fff.domicile : undefined, valider: !!valider, joueurs: joueurs
+      };
+      ['btnAppliquerFFF', 'btnValiderFFF'].forEach(function (id) { document.getElementById(id).disabled = true; });
+      appel('appliquerFeuilleFFF', p).then(function (d) {
+        fermerModales();
+        etat.modifie = false;
+        recevoirDonnees(d);
+        toast(valider && !d.valide ? 'Feuille enregistrée, mais pas validée : indiquez la journée.'
+          : (d.valide ? 'Feuille FFF enregistrée et validée.' : 'Feuille FFF enregistrée : vérifiez puis validez.'));
+        ouvrirPanneau(d.matchId);
+      }).catch(erreur).then(majBoutonsFFF);
+    }
+    document.getElementById('btnAppliquerFFF').addEventListener('click', function () { appliquerFFF(false); });
+    document.getElementById('btnValiderFFF').addEventListener('click', function () { appliquerFFF(true); });
 
     /* ---------- Nouvelle rencontre ---------- */
     function ouvrirNouvelle(equipe, date) {
