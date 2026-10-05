@@ -4,7 +4,7 @@
   <base target="_top">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Suivi U13 – Article 5.8</title>
+  <title>Participation &amp; qualification U13</title>
   <style>
     :root {
       --fond: #f5f6f8;
@@ -259,7 +259,7 @@
 </head>
 <body>
   <header>
-    <h1>Suivi U13 – Article 5.8<small>Règles 1, 2, 3 et 4 · Règlement U13 Haute-Vienne</small></h1>
+    <h1>Participation &amp; qualification U13<small id="sousTitre">Contrôle des règles de participation – District de la Haute-Vienne</small></h1>
     <nav>
       <button data-vue="calendrier" class="actif">Calendrier<span id="pastilleNav"></span></button>
       <button data-vue="joueurs">Joueurs</button>
@@ -796,6 +796,11 @@
       return r;
     }
 
+    // Sous-titre : saison en cours (de juillet à juin)
+    (function () {
+      var d = new Date(), a = d.getMonth() >= 6 ? d.getFullYear() : d.getFullYear() - 1;
+      document.getElementById('sousTitre').textContent = 'Contrôle des règles de participation – District de la Haute-Vienne · Saison ' + a + '-' + (a + 1);
+    })();
     var etat = { donnees: null, feuille: null, modifie: false, filtre: 'conv', affiches: {}, premierAffichage: true };
     var VERSION_ATTENDUE = '2026-10-05i';
     var ICONE_STATUT = { 'À valider': '📝', 'Validé': '🔒', 'Reporté': '⏸', 'Annulé': '✖' };
