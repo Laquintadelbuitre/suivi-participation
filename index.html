@@ -275,6 +275,7 @@
         <div class="groupe">
           <button class="bouton" id="btnSuivante">Prochaine feuille à valider</button>
           <span id="resumeCal" class="resume"></span>
+          <button class="bouton secondaire petit" id="btnActualiser" title="Relire le Google Sheet">↻ Actualiser</button>
         </div>
         <div class="groupe">
           <button class="bouton secondaire" id="btnFFF">🔗 Feuille FFF</button>
@@ -511,7 +512,7 @@
       if (typeof google !== 'undefined' && google.script && google.script.run) {
         return new Promise(function (resolve, reject) {
           var r = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
-          r[fn].apply(r, args);
+          r.apiInterne(fn, args);
         });
       }
       return appelHttp(fn, args, false);
@@ -796,7 +797,7 @@
     }
 
     var etat = { donnees: null, feuille: null, modifie: false, filtre: 'conv', affiches: {}, premierAffichage: true };
-    var VERSION_ATTENDUE = '2026-10-05f';
+    var VERSION_ATTENDUE = '2026-10-05h';
     var ICONE_STATUT = { 'À valider': '📝', 'Validé': '🔒', 'Reporté': '⏸', 'Annulé': '✖' };
 
     /* ---------- Dates ---------- */
@@ -831,13 +832,80 @@
         'puis Déployer → Gérer les déploiements → crayon → Nouvelle version → Déployer.';
       document.querySelector('main').prepend(b);
     }
-    function rafraichir() {
-      return appel('getDonneesInitiales').then(function (d) { recevoirDonnees(d); return d; });
+    /* ---------- Rapidité : dernière version affichée tout de suite, feuilles gardées en mémoire ---------- */
+    var CLE_DONNEES = 'suiviU13_donnees', CLE_FEUILLES = 'suiviU13_feuilles';
+    etat.feuilles = {};
+    try { etat.feuilles = JSON.parse(localStorage.getItem(CLE_FEUILLES) || '{}') || {}; } catch (e) { etat.feuilles = {}; }
+    function memoriserFeuilles() {
+      try {
+        var ids = Object.keys(etat.feuilles);
+        if (ids.length > 15) ids.slice(0, ids.length - 15).forEach(function (k) { delete etat.feuilles[k]; });
+        localStorage.setItem(CLE_FEUILLES, JSON.stringify(etat.feuilles));
+      } catch (e) { /* stockage plein ou interdit */ }
     }
-    function recevoirDonnees(d) {
+    function rafraichir(forcer) {
+      majIndicateur(true);
+      return appel('getDonneesInitiales', !!forcer).then(function (d) {
+        recevoirDonnees(d);
+        try { localStorage.setItem(CLE_DONNEES, JSON.stringify(d)); } catch (e) { /* stockage plein ou interdit */ }
+        prechargerFeuilles();
+        return d;
+      }).then(function (d) { majIndicateur(false); return d; }, function (e) { majIndicateur(false); throw e; });
+    }
+    function recevoirDonnees(d, depuisMemoire) {
+      var revChangee = !depuisMemoire && etat.donnees && etat.donnees.rev !== d.rev;
+      if (!depuisMemoire) {
+        // On ne garde que les feuilles calculées avec la même version des données
+        Object.keys(etat.feuilles).forEach(function (k) { if (etat.feuilles[k].rev !== d.rev) delete etat.feuilles[k]; });
+        memoriserFeuilles();
+      }
+      // Feuille ouverte depuis la mémoire mais les données ont changé : on la relit (si rien n'est en cours de saisie)
+      if (revChangee && panneauOuvert() && etat.feuille && !etat.modifie) {
+        var idOuvert = etat.feuille.match.id;
+        setTimeout(function () {
+          chargerFeuilleServeur(idOuvert).then(function (f) {
+            if (panneauOuvert() && etat.feuille && etat.feuille.match.id === idOuvert && !etat.modifie) {
+              chargerDansPanneau(JSON.parse(JSON.stringify(f)), false);
+            }
+          }).catch(function () {});
+        }, 0);
+      }
       etat.donnees = d;
-      verifierVersion(d);
+      if (!depuisMemoire) verifierVersion(d);
       dessinerCalendrier();
+    }
+    function majIndicateur(enCours) {
+      var b = document.getElementById('btnActualiser');
+      if (b) { b.disabled = enCours; b.textContent = enCours ? '⏳ mise à jour…' : '↻ Actualiser'; }
+    }
+    // Feuille déjà chargée (même révision des données) : ouverture instantanée
+    function feuilleEnMemoire(id) {
+      var f = etat.feuilles[id];
+      return f && etat.donnees && f.rev === etat.donnees.rev ? f.feuille : null;
+    }
+    function chargerFeuilleServeur(id) {
+      var rev = etat.donnees && etat.donnees.rev;
+      return appel('getFeuilleMatch', id).then(function (f) {
+        etat.feuilles[id] = { rev: rev, feuille: f };
+        memoriserFeuilles();
+        return f;
+      });
+    }
+    // Précharge en arrière-plan les feuilles qu'on ouvre le plus souvent (à valider, prochaines rencontres)
+    var prechargement = null;
+    function prechargerFeuilles() {
+      clearTimeout(prechargement);
+      var d = etat.donnees;
+      var ids = d.aValider.slice(0, 3).concat(d.matchs.filter(function (m) {
+        return m.date > d.aujourdhui && m.type !== 'Exempt' && m.statut === 'À valider';
+      }).slice(0, 3).map(function (m) { return m.id; }));
+      (function suivant(i) {
+        if (i >= ids.length) return;
+        prechargement = setTimeout(function () {
+          if (feuilleEnMemoire(ids[i])) return suivant(i + 1);
+          chargerFeuilleServeur(ids[i]).then(function () { suivant(i + 1); }, function () {});
+        }, 400);
+      })(0);
     }
     function equipesTriees() {
       return (etat.donnees.equipes || []).slice().sort(function (a, b) { return a.rang - b.rang; });
@@ -1016,7 +1084,13 @@
       document.getElementById('pMotifs').innerHTML = '';
       document.getElementById('edition').classList.remove('ouverte');
       etatImage('');
-      return appel('getFeuilleMatch', id).then(function (f) { chargerDansPanneau(f, true); }).catch(erreur);
+      var enMemoire = feuilleEnMemoire(id);
+      if (enMemoire) return Promise.resolve(chargerDansPanneau(JSON.parse(JSON.stringify(enMemoire)), true));
+      return chargerFeuilleServeur(id).then(function (f) {
+        if (etat.feuille && panneauOuvert() && document.querySelector('.rencontre.selection') &&
+            document.querySelector('.rencontre.selection').dataset.id !== id) return;
+        chargerDansPanneau(JSON.parse(JSON.stringify(f)), true);
+      }).catch(erreur);
     }
     function chargerDansPanneau(f, nouveau) {
       etat.feuille = f;
@@ -1852,7 +1926,15 @@
       }).catch(erreur);
     });
 
-    rafraichir().catch(erreur);
+    document.getElementById('btnActualiser').addEventListener('click', function () { rafraichir(true).catch(erreur); });
+    // Affichage immédiat de la dernière version connue, puis mise à jour
+    (function () {
+      try {
+        var memo = JSON.parse(localStorage.getItem(CLE_DONNEES) || 'null');
+        if (memo && memo.matchs) recevoirDonnees(memo, true);
+      } catch (e) { /* rien en mémoire */ }
+      rafraichir().catch(erreur);
+    })();
   </script>
 </body>
 </html>
