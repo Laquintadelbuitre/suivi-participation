@@ -797,7 +797,7 @@
     }
 
     var etat = { donnees: null, feuille: null, modifie: false, filtre: 'conv', affiches: {}, premierAffichage: true };
-    var VERSION_ATTENDUE = '2026-10-05h';
+    var VERSION_ATTENDUE = '2026-10-05i';
     var ICONE_STATUT = { 'À valider': '📝', 'Validé': '🔒', 'Reporté': '⏸', 'Annulé': '✖' };
 
     /* ---------- Dates ---------- */
@@ -824,13 +824,18 @@
 
     /* ---------- Chargement ---------- */
     function verifierVersion(d) {
-      if (d.version === VERSION_ATTENDUE || document.getElementById('alerteVersion')) return;
-      var b = document.createElement('div');
-      b.id = 'alerteVersion';
-      b.className = 'bandeau bloque';
-      b.innerHTML = '⛔ <b>Le script Google (Code.gs) n\'est pas à jour.</b> Dans Apps Script : collez le nouveau Code.gs, ' +
-        'puis Déployer → Gérer les déploiements → crayon → Nouvelle version → Déployer.';
-      document.querySelector('main').prepend(b);
+      var b = document.getElementById('alerteVersion');
+      if (d.version === VERSION_ATTENDUE) { if (b) b.remove(); return; }
+      if (!b) {
+        b = document.createElement('div');
+        b.id = 'alerteVersion';
+        b.className = 'bandeau bloque';
+        document.querySelector('main').prepend(b);
+      }
+      b.innerHTML = '⛔ <b>Le script Google (Code.gs) en ligne n\'est pas le bon</b> (en ligne : ' + esc(d.version || 'ancien') +
+        ', attendu : ' + VERSION_ATTENDUE + '). Dans Apps Script : collez le nouveau Code.gs, enregistrez, puis Déployer → ' +
+        'Gérer les déploiements → crayon ✏️ du déploiement existant → Version : « Nouvelle version » → Déployer. ' +
+        '(Ne pas faire « Nouveau déploiement » : l\'adresse changerait.)';
     }
     /* ---------- Rapidité : dernière version affichée tout de suite, feuilles gardées en mémoire ---------- */
     var CLE_DONNEES = 'suiviU13_donnees', CLE_FEUILLES = 'suiviU13_feuilles';
