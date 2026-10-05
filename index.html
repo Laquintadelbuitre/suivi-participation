@@ -1,803 +1,644 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Suivi Individuel — U13</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<style>
-  :root{
-    --bg:#F5F6F4;
-    --surface:#FFFFFF;
-    --line:#E1E3DE;
-    --ink:#1B2430;
-    --ink-soft:#5B6472;
-    --brand:#12324F;
-    --brand-soft:#E7EEF3;
-
-    --l1:#D6484B; --l1-bg:#FBE7E7;
-    --l2:#E17A34; --l2-bg:#FCEBDC;
-    --l3:#D9A82B; --l3-bg:#FBF1D6;
-    --l4:#3E9E6F; --l4-bg:#E3F3EA;
-    --l5:#2E6FA6; --l5-bg:#E2ECF4;
-
-    --status-none:#B7BEC7;
-    --status-none-bg:#EDEFEE;
-    --status-partial:#E1793A;
-    --status-partial-bg:#FCEBDC;
-    --status-done:#3E9E6F;
-    --status-done-bg:#E3F3EA;
-  }
-  *{box-sizing:border-box;}
-  body{
-    margin:0; background:var(--bg); color:var(--ink);
-    font-family:'Inter',system-ui,sans-serif;
-    line-height:1.45;
-  }
-  h1,h2,h3,.brand-type{ font-family:'Space Grotesk',system-ui,sans-serif; }
-
-  header{
-    background:var(--brand); color:#fff;
-    padding:22px 28px; display:flex; align-items:center; justify-content:space-between;
-    flex-wrap:wrap; gap:14px;
-  }
-  header h1{ margin:0; font-size:1.35rem; font-weight:600; letter-spacing:.2px; }
-  header p{ margin:2px 0 0; font-size:.85rem; color:#C7D6E2; }
-
-  nav.tabs{ display:flex; gap:6px; }
-  nav.tabs button{
-    background:transparent; border:1px solid rgba(255,255,255,.35); color:#fff;
-    padding:9px 16px; border-radius:20px; font:inherit; font-size:.88rem; font-weight:500;
-    cursor:pointer; transition:background .15s;
-  }
-  nav.tabs button.active{ background:#fff; color:var(--brand); border-color:#fff; font-weight:600; }
-  nav.tabs button:not(.active):hover{ background:rgba(255,255,255,.12); }
-
-  main{ max-width:960px; margin:0 auto; padding:28px 20px 60px; }
-  .card{
-    background:var(--surface); border:1px solid var(--line); border-radius:10px;
-    padding:22px 24px; margin-bottom:20px;
-  }
-  .card h2{ font-size:1.02rem; margin:0 0 16px; color:var(--brand); }
-
-  .row{ display:flex; gap:16px; flex-wrap:wrap; margin-bottom:4px; }
-  .field{ flex:1 1 200px; display:flex; flex-direction:column; gap:6px; }
-  .field label{ font-size:.8rem; font-weight:600; color:var(--ink-soft); }
-  select, input[type=date], input[type=text], textarea{
-    font:inherit; padding:9px 11px; border:1px solid var(--line); border-radius:7px;
-    background:#fff; color:var(--ink);
-  }
-  textarea{ resize:vertical; min-height:64px; }
-
-  /* ---------- Grille joueurs style "météo" ---------- */
-  .legend{ display:flex; gap:18px; flex-wrap:wrap; font-size:.8rem; color:var(--ink-soft); margin-bottom:16px; }
-  .legend span{ display:inline-flex; align-items:center; gap:6px; }
-  .dot{ width:10px; height:10px; border-radius:50%; display:inline-block; }
-  .dot.none{ background:var(--status-none); }
-  .dot.partial{ background:var(--status-partial); }
-  .dot.done{ background:var(--status-done); }
-
-  .player-grid{
-    display:grid; grid-template-columns:repeat(auto-fill, minmax(120px,1fr)); gap:10px;
-  }
-  .player-tile{
-    border:2px solid var(--status-none); background:var(--status-none-bg);
-    border-radius:10px; padding:14px 8px; text-align:center; cursor:pointer;
-    font-weight:600; font-size:.88rem; color:var(--ink);
-    transition:transform .08s;
-  }
-  .player-tile:hover{ transform:translateY(-2px); }
-  .player-tile.partial{ border-color:var(--status-partial); background:var(--status-partial-bg); }
-  .player-tile.done{ border-color:var(--status-done); background:var(--status-done-bg); }
-  .player-tile .sub{ display:block; font-size:.7rem; font-weight:500; color:var(--ink-soft); margin-top:4px; }
-
-  /* ---------- Modal ---------- */
-  .modal-overlay{
-    display:none; position:fixed; inset:0; background:rgba(15,20,28,.55);
-    align-items:center; justify-content:center; padding:20px; z-index:50;
-  }
-  .modal-overlay.open{ display:flex; }
-  .modal{
-    background:#fff; border-radius:12px; max-width:640px; width:100%;
-    max-height:92vh; overflow-y:auto; padding:24px 26px;
-  }
-  .modal-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
-  .modal-head h2{ margin:0; font-size:1.15rem; color:var(--brand); }
-  .modal-head .status-badge{
-    font-size:.75rem; font-weight:700; padding:3px 11px; border-radius:20px;
-  }
-  .modal-sub{ font-size:.82rem; color:var(--ink-soft); margin-bottom:18px; }
-  .close-x{ background:none; border:none; font-size:1.3rem; cursor:pointer; color:var(--ink-soft); line-height:1; }
-
-  .comp-row{ border-top:1px solid var(--line); padding:14px 0; }
-  .comp-row:first-of-type{ border-top:none; padding-top:4px; }
-  .comp-head{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:8px; }
-  .comp-head .name{ font-weight:600; font-size:.9rem; }
-  .comp-head .val{
-    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:.8rem;
-    padding:2px 10px; border-radius:20px;
-  }
-  input[type=range]{ width:100%; accent-color:var(--brand); }
-  .comp-desc{ font-size:.81rem; color:var(--ink-soft); margin-top:6px; min-height:1.1em; }
-  .comp-desc.muted{ font-style:italic; opacity:.65; }
-  .scale-ticks{ display:flex; justify-content:space-between; font-size:.68rem; color:#9AA3AD; margin-top:2px; }
-
-  button.primary{
-    background:var(--brand); color:#fff; border:none; border-radius:7px;
-    padding:12px 22px; font:inherit; font-weight:600; font-size:.92rem; cursor:pointer;
-  }
-  button.primary:hover{ background:#0D2740; }
-  button.primary:disabled{ opacity:.5; cursor:default; }
-  button.secondary{
-    background:#fff; color:var(--brand); border:1px solid var(--line); border-radius:7px;
-    padding:12px 20px; font:inherit; font-weight:600; font-size:.92rem; cursor:pointer;
-  }
-  button.secondary:hover{ background:var(--brand-soft); }
-  .modal-actions{ display:flex; gap:10px; margin-top:18px; flex-wrap:wrap; }
-  #modal-status{ margin-top:10px; font-size:.85rem; }
-  #modal-status.ok{ color:#2A7A4F; }
-  #modal-status.err{ color:#B23A3A; }
-
-  .chips{ display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
-  .chip{
-    border:1px solid var(--line); background:#fff; border-radius:20px; padding:7px 14px;
-    font-size:.82rem; cursor:pointer; user-select:none; color:var(--ink-soft);
-  }
-  .chip.selected{ background:var(--brand-soft); border-color:var(--brand); color:var(--brand); font-weight:600; }
-
-  #radar-wrap{ max-width:560px; margin:18px auto 6px; }
-
-  table.evo{ width:100%; border-collapse:collapse; font-size:.85rem; margin-top:18px; }
-  table.evo th, table.evo td{ text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); }
-  table.evo th{ color:var(--ink-soft); font-weight:600; font-size:.78rem; }
-  .delta{ font-weight:600; }
-  .delta.up{ color:#2A7A4F; }
-  .delta.down{ color:#B23A3A; }
-  .delta.flat{ color:#9AA3AD; }
-
-  .empty-state{ color:var(--ink-soft); font-size:.9rem; padding:8px 2px; }
-  .config-warning{
-    background:#FBF1D6; border:1px solid #E3C864; color:#6B5313;
-    padding:12px 16px; border-radius:8px; font-size:.85rem; margin-bottom:20px;
-  }
-  .config-warning code{ background:#00000010; padding:1px 5px; border-radius:4px; }
-
-  @media (max-width:600px){
-    header{ padding:18px; }
-    main{ padding:20px 12px 40px; }
-    .card{ padding:16px; }
-    .modal{ padding:18px; }
-  }
-</style>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Suivi U13 – Article 5.8</title>
+  <style>
+    :root {
+      --fond: #f5f6f8;
+      --carte: #ffffff;
+      --texte: #1d2330;
+      --doux: #5d6576;
+      --bord: #dfe3ea;
+      --accent: #1f4fa3;
+      --accent-texte: #ffffff;
+      --ok: #1e7d46;
+      --ok-fond: #e5f4ea;
+      --alerte: #9a6200;
+      --alerte-fond: #fff3d6;
+      --bloque: #b3261e;
+      --bloque-fond: #fde7e5;
+      --info-fond: #e8eefb;
+      --ligne-survol: #f0f3f9;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --fond: #14171d;
+        --carte: #1d212a;
+        --texte: #e7eaf0;
+        --doux: #a0a7b5;
+        --bord: #323846;
+        --accent: #6f9bf0;
+        --accent-texte: #0e1320;
+        --ok: #6fd39a;
+        --ok-fond: #183224;
+        --alerte: #f2c062;
+        --alerte-fond: #3a2e12;
+        --bloque: #f28b82;
+        --bloque-fond: #3d1c1a;
+        --info-fond: #1f2a44;
+        --ligne-survol: #252a35;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--fond); color: var(--texte);
+      font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    header {
+      padding: 16px; background: var(--carte); border-bottom: 1px solid var(--bord);
+      display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+    }
+    h1 { font-size: 18px; margin: 0; }
+    h1 small { display: block; font-size: 12px; font-weight: 400; color: var(--doux); }
+    nav { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    nav button {
+      border: 1px solid var(--bord); background: transparent; color: var(--texte);
+      padding: 8px 14px; border-radius: 8px; cursor: pointer; font: inherit;
+    }
+    nav button.actif { background: var(--accent); color: var(--accent-texte); border-color: var(--accent); }
+    nav a.lien-externe {
+      border: 1px solid var(--accent); color: var(--accent); text-decoration: none;
+      padding: 8px 14px; border-radius: 8px; font-weight: 600;
+    }
+    nav a.lien-externe:hover { background: var(--accent); color: var(--accent-texte); }
+    .pastille {
+      display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 4px; border-radius: 999px;
+      background: var(--bloque); color: #fff; font-size: 12px; font-weight: 700; text-align: center;
+    }
+    main { padding: 16px; max-width: 1200px; margin: 0 auto; }
+    .vue { display: none; }
+    .vue.active { display: block; }
+    .carte {
+      background: var(--carte); border: 1px solid var(--bord); border-radius: 12px;
+      padding: 16px; margin-bottom: 16px;
+    }
+    .barre { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+    label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--doux); }
+    label.case { flex-direction: row; align-items: center; gap: 8px; color: var(--texte); font-size: 14px; }
+    select, input[type=text], input[type=date], input[type=number], input[type=password] {
+      font: inherit; color: var(--texte); background: var(--fond);
+      border: 1px solid var(--bord); border-radius: 8px; padding: 8px 10px; min-width: 0;
+    }
+    select:disabled, input:disabled { opacity: .7; }
+    #selectMatch { min-width: min(560px, 100%); }
+    .bouton {
+      font: inherit; border: 0; border-radius: 8px; padding: 9px 16px; cursor: pointer;
+      background: var(--accent); color: var(--accent-texte); font-weight: 600;
+    }
+    .bouton:disabled { opacity: .5; cursor: default; }
+    .bouton.secondaire { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+    .bouton.valider { background: var(--ok); color: #fff; }
+    .info-match { color: var(--doux); margin-top: 10px; }
+    .infos-match { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-top: 12px; }
+    .infos-match input[type=number] { width: 90px; }
+    .infos-match input[type=text] { width: 70px; }
+    .statut {
+      display: inline-block; padding: 4px 10px; border-radius: 999px; font-weight: 600; font-size: 13px;
+    }
+    .statut.valide { background: var(--ok-fond); color: var(--ok); }
+    .statut.avalider { background: var(--alerte-fond); color: var(--alerte); }
+    .statut.autre { background: var(--ligne-survol); color: var(--doux); }
+    .bandeau { border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; font-weight: 500; }
+    .bandeau.ok { background: var(--ok-fond); color: var(--ok); }
+    .bandeau.alerte { background: var(--alerte-fond); color: var(--alerte); }
+    .bandeau.bloque { background: var(--bloque-fond); color: var(--bloque); }
+    .bandeau.info {
+      background: var(--info-fond); color: var(--texte);
+      display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;
+    }
+    .tableau-conteneur { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--bord); vertical-align: top; }
+    th { font-size: 12px; color: var(--doux); font-weight: 600; white-space: nowrap; }
+    tbody tr:hover { background: var(--ligne-survol); }
+    tr.convoque-bloque { background: var(--bloque-fond); }
+    td.centre, th.centre { text-align: center; }
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap;
+    }
+    .badge.OK { background: var(--ok-fond); color: var(--ok); }
+    .badge.ALERTE { background: var(--alerte-fond); color: var(--alerte); }
+    .badge.BLOQUE { background: var(--bloque-fond); color: var(--bloque); }
+    .motifs { margin: 0; padding-left: 16px; color: var(--doux); font-size: 12px; }
+    .motifs li { margin: 2px 0; }
+    .nom { font-weight: 600; }
+    .sous { color: var(--doux); font-size: 12px; }
+    .depasse { color: var(--bloque); font-weight: 700; }
+    input[type=checkbox] { width: 18px; height: 18px; cursor: pointer; }
+    input[type=checkbox]:disabled { cursor: default; }
+    .pied { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-top: 12px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .compteur { color: var(--doux); }
+    .modifie { color: var(--alerte); font-weight: 600; }
+    .grille { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+    h2 { font-size: 16px; margin: 0 0 12px; }
+    .legende { color: var(--doux); font-size: 12px; margin-top: 8px; }
+    #toast {
+      position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
+      background: var(--texte); color: var(--fond); padding: 10px 16px; border-radius: 8px;
+      opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100% - 32px);
+    }
+    #toast.visible { opacity: 1; }
+    .chargement { color: var(--doux); padding: 20px; text-align: center; }
+    @media (max-width: 640px) {
+      main { padding: 12px; }
+      th.optionnel, td.optionnel { display: none; }
+      .actions { width: 100%; }
+      .actions .bouton { flex: 1; }
+    }
+  </style>
 </head>
 <body>
+  <header>
+    <h1>Suivi U13 – Article 5.8<small>Règles 1, 2, 3 et 4 · Règlement U13 Haute-Vienne</small></h1>
+    <nav>
+      <button data-vue="feuille" class="actif">Feuilles de match<span id="pastilleNav"></span></button>
+      <button data-vue="joueurs">Joueurs</button>
+      <button data-vue="ajouter">Ajouter</button>
+      <a class="lien-externe" id="lienConvocations" target="_blank" rel="noopener"
+         href="https://laquintadelbuitre.github.io/convoc-LF/">Convocations ↗</a>
+    </nav>
+  </header>
 
-<header>
-  <div>
-    <h1>Suivi Individuel des Joueurs</h1>
-    <p>Développement technique — U13</p>
-  </div>
-  <nav class="tabs">
-    <button id="tab-btn-saisie" class="active" onclick="showTab('saisie')">Évaluation</button>
-    <button id="tab-btn-evo" onclick="showTab('evo')">Évolution</button>
-  </nav>
-</header>
+  <main>
+    <!-- ============ FEUILLES DE MATCH ============ -->
+    <section id="vue-feuille" class="vue active">
+      <div id="bandeauAValider"></div>
 
-<main>
-  <div id="config-warning" class="config-warning" style="display:none">
-    ⚠️ L'URL de l'application web n'est pas configurée. Ouvrez ce fichier HTML dans un éditeur
-    et remplacez <code>CONFIG.WEBAPP_URL</code> en haut du script par l'URL de déploiement de
-    votre Google Apps Script (voir instructions dans Code.gs).
-  </div>
-
-  <!-- ===================== TAB SAISIE ===================== -->
-  <section id="tab-saisie">
-    <div class="card">
-      <h2>Session d'évaluation</h2>
-      <div class="row">
-        <div class="field">
-          <label for="sel-date">Date</label>
-          <input type="date" id="sel-date" onchange="onSessionChange()">
+      <div class="carte">
+        <div class="barre">
+          <label>Feuille de match
+            <select id="selectMatch"></select>
+          </label>
+          <label class="case"><input type="checkbox" id="filtreConvoques" checked> Seulement les convoqués</label>
         </div>
-        <div class="field">
-          <label for="sel-evaluateur">Évaluateur</label>
-          <select id="sel-evaluateur" onchange="onSessionChange()">
-            <option>Abdoulaye</option>
-            <option>Tom</option>
-            <option>Abdoulaye et Tom</option>
-          </select>
+        <div class="infos-match">
+          <span id="statutMatch"></span>
+          <label>Type
+            <select id="iType"><option>Championnat</option><option>Coupe</option></select>
+          </label>
+          <label>Phase<input type="text" id="iPhase"></label>
+          <label>Journée<input type="number" id="iJournee" min="1"></label>
         </div>
+        <div id="infoMatch" class="info-match"></div>
       </div>
-    </div>
 
-    <div class="card">
-      <h2>Joueurs</h2>
-      <div class="legend">
-        <span><span class="dot none"></span> Non évalué</span>
-        <span><span class="dot partial"></span> Incomplet (sauvegardé)</span>
-        <span><span class="dot done"></span> Complet</span>
+      <div id="bandeau"></div>
+
+      <div class="carte">
+        <div class="tableau-conteneur">
+          <table>
+            <thead>
+              <tr>
+                <th>Joueur</th>
+                <th>Statut</th>
+                <th>Détail</th>
+                <th class="centre">Convoqué</th>
+                <th class="centre">Entré en jeu</th>
+              </tr>
+            </thead>
+            <tbody id="corpsFeuille"><tr><td colspan="5" class="chargement">Chargement…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="pied">
+          <span id="compteur" class="compteur"></span>
+          <span class="actions">
+            <span id="etatModif"></span>
+            <button id="btnEnregistrer" class="bouton secondaire" disabled>Enregistrer</button>
+            <button id="btnValider" class="bouton valider">Valider définitivement</button>
+            <button id="btnRouvrir" class="bouton secondaire" style="display:none">Rouvrir</button>
+          </span>
+        </div>
+        <p class="legende">
+          ✅ peut jouer · ⚠️ compte dans le quota de la règle 3 · ⛔ ne peut pas jouer.<br>
+          Les feuilles arrivent automatiquement depuis l'outil convocation. Après le match : cochez « Entré en jeu »,
+          renseignez la journée, puis « Valider définitivement ». Tant qu'une feuille n'est pas validée,
+          tous ses convoqués comptent comme ayant joué (par prudence).
+        </p>
       </div>
-      <div class="player-grid" id="player-grid"></div>
-    </div>
-  </section>
+    </section>
 
-  <!-- ===================== TAB EVOLUTION ===================== -->
-  <section id="tab-evo" style="display:none">
-    <div class="card">
-      <h2>Choisir un joueur</h2>
-      <div class="field">
-        <select id="sel-joueur-evo"><option value="">— Choisir —</option></select>
+    <!-- ============ JOUEURS ============ -->
+    <section id="vue-joueurs" class="vue">
+      <div class="carte">
+        <h2>Matchs joués par équipe</h2>
+        <div class="tableau-conteneur">
+          <table>
+            <thead id="enteteJoueurs"></thead>
+            <tbody id="corpsJoueurs"><tr><td class="chargement">Chargement…</td></tr></tbody>
+          </table>
+        </div>
+        <p class="legende" id="legendeJoueurs"></p>
       </div>
-      <div id="evo-dates-wrap" style="margin-top:14px; display:none">
-        <label style="font-size:.8rem; font-weight:600; color:var(--ink-soft)">
-          Évaluations disponibles (3 maximum, pour comparer)
-        </label>
-        <div class="chips" id="evo-chips"></div>
+    </section>
+
+    <!-- ============ AJOUTER ============ -->
+    <section id="vue-ajouter" class="vue">
+      <div class="carte">
+        <h2>Ajouter un match à la main</h2>
+        <p class="sous" style="margin-top:-6px">Inutile pour les matchs convoqués : ils arrivent automatiquement.
+          À utiliser pour une rencontre sans convocation (ex. coupe).</p>
+        <div class="grille">
+          <label>Date<input type="date" id="mDate"></label>
+          <label>Équipe<select id="mEquipe"></select></label>
+          <label>Type
+            <select id="mType"><option>Championnat</option><option>Coupe</option></select>
+          </label>
+          <label>Phase<input type="text" id="mPhase" value="1"></label>
+          <label>Journée<input type="number" id="mJournee" min="1"></label>
+          <label>Adversaire<input type="text" id="mAdversaire"></label>
+          <label>Lieu<select id="mLieu"><option>Domicile</option><option>Extérieur</option></select></label>
+        </div>
+        <div class="pied"><span></span><button class="bouton" id="btnAjouterMatch">Ajouter le match</button></div>
       </div>
-      <div id="evo-empty" class="empty-state" style="display:none">
-        Aucune évaluation enregistrée pour ce joueur pour l'instant.
+
+      <div class="carte">
+        <h2>Ajouter un joueur</h2>
+        <div class="grille">
+          <label>Prénom (comme dans la convocation)<input type="text" id="jPrenom"></label>
+          <label>Nom (facultatif)<input type="text" id="jNom"></label>
+          <label>N° de licence (facultatif)<input type="text" id="jLicence"></label>
+          <label>Catégorie
+            <select id="jCategorie"><option>U13</option><option>U12</option><option>U13F</option><option>U12F</option><option>U14F</option><option>U11</option></select>
+          </label>
+        </div>
+        <div class="pied"><span></span><button class="bouton" id="btnAjouterJoueur">Ajouter le joueur</button></div>
       </div>
-    </div>
 
-    <div class="card" id="evo-chart-card" style="display:none">
-      <h2>Radar des 9 compétences</h2>
-      <div id="radar-wrap"><canvas id="radar-canvas"></canvas></div>
-      <table class="evo" id="evo-table"></table>
-      <div style="margin-top:16px">
-        <button class="secondary" onclick="downloadPDF()">Télécharger le radar en PDF</button>
+      <div class="carte">
+        <h2>Règle 2 – dernières journées</h2>
+        <p class="sous">Les deux dernières journées de chaque phase se renseignent dans l'onglet <b>Phases</b> du Sheet
+          (une ligne par phase et par équipe). Les paramètres (règles actives, seuils, phase courante, clé d'accès)
+          sont dans l'onglet <b>Parametres</b>.</p>
       </div>
-    </div>
-  </section>
-</main>
+    </section>
+  </main>
 
-<!-- ===================== MODAL D'ÉVALUATION ===================== -->
-<div class="modal-overlay" id="modal-overlay">
-  <div class="modal">
-    <div class="modal-head">
-      <h2 id="modal-player-name">Joueur</h2>
-      <button class="close-x" onclick="closeModal()">✕</button>
-    </div>
-    <div class="modal-sub" id="modal-sub"></div>
-    <span class="status-badge" id="modal-status-badge"></span>
+  <div id="toast"></div>
 
-    <div id="modal-comp-list" style="margin-top:14px"></div>
+  <script>
+    var etat = { donnees: null, feuille: null, modifie: false };
 
-    <div class="field" style="margin-top:6px">
-      <label for="modal-commentaire">Commentaire (optionnel)</label>
-      <textarea id="modal-commentaire" placeholder="Observation libre…"></textarea>
-    </div>
+    /* ---------- Utilitaires ---------- */
+    function appel(fn) {
+      var args = Array.prototype.slice.call(arguments, 1);
+      return new Promise(function (resolve, reject) {
+        var r = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+        r[fn].apply(r, args);
+      });
+    }
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+    function fr(iso) {
+      var p = String(iso || '').split('-');
+      return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : iso;
+    }
+    function toast(msg) {
+      var t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('visible');
+      clearTimeout(toast._t);
+      toast._t = setTimeout(function () { t.classList.remove('visible'); }, 4000);
+    }
+    function erreur(e) { toast('Erreur : ' + (e && e.message ? e.message : e)); }
+    var ICONES = { OK: '✅ OK', ALERTE: '⚠️ Quota', BLOQUE: '⛔ Bloqué' };
+    var ICONE_STATUT = { 'À valider': '📝', 'Validé': '🔒', 'Reporté': '⏸', 'Annulé': '✖' };
+    function nomComplet(l) { return [l.prenom, l.nom].filter(Boolean).join(' '); }
+    function estValide(m) { return m && m.statut === 'Validé'; }
 
-    <div class="modal-actions">
-      <button class="primary" id="modal-save-btn" onclick="saveModalEvaluation()">Enregistrer</button>
-      <button class="secondary" onclick="closeModal()">Fermer sans enregistrer</button>
-      <button class="secondary" id="history-toggle-btn" onclick="toggleHistory()" style="display:none">Voir l'historique</button>
-    </div>
-    <div id="modal-status"></div>
-    <div id="history-panel" style="display:none"></div>
-  </div>
-</div>
+    function libelleMatch(m) {
+      var detail = m.type === 'Coupe' ? 'Coupe' : 'Ph. ' + m.phase + ' – ' + (m.journee ? 'J' + m.journee : 'J ?');
+      return (ICONE_STATUT[m.statut] || '') + ' ' + fr(m.date) + ' · Équipe ' + m.equipe + ' · ' + detail +
+        (m.adversaire ? ' · ' + m.adversaire : '');
+    }
 
-<script>
-/* ============================================================
-   CONFIGURATION — à modifier après déploiement du Google Apps Script
-   ============================================================ */
-const CONFIG = {
-  WEBAPP_URL: 'PASTE_YOUR_APPS_SCRIPT_WEBAPP_URL_HERE'
-};
-
-/* ============================================================
-   LISTE DES 22 JOUEURS — modifiez ici si l'effectif change
-   ============================================================ */
-const PLAYERS = [
-  'Hadi', 'Sebastien', 'Mickaël', 'Bakoutoubo', 'Sacha', 'Keys', 'Nourou',
-  'Yanis', 'Mathis', 'Ethan', 'Abdoul Karim', 'Jalil', 'Gabin', 'Adam',
-  'Kalifa', 'Bilel', 'Pablo', 'Melih', 'Issam', 'Emir', 'Loan', 'Sarah'
-];
-
-/* ============================================================
-   GRILLE DE RÉFÉRENCE — modifiez ici si les repères évoluent
-   ============================================================ */
-const COMPETENCES = [
-  { key:'PriseInfo',     label:"Prise d'informations", levels:[
-    "Tête basse","Tête haute","Tête haute et regarde loin",
-    "Tourne la tête / Scan","Scan systématique et régulier avant réception"] },
-  { key:'Deplacements',  label:"Déplacements", levels:[
-    "Attend la passe du partenaire","Donne et redemande",
-    "Déplacement dans le temps de passe", null, null] },
-  { key:'Effort',        label:"Capacités dans l'effort", levels:[
-    "Souvent à l'arrêt","Souvent en course","Efforts en 2 temps (transition)",
-    "Efforts en 3 temps (double transition)","Répète les efforts à haute intensité"] },
-  { key:'Motricite',     label:"Motricité", levels:[
-    "Appuis talons","Pointe de pied","Bassin et épaules orienté vers l'avant",
-    "Se retourne des 2 côtés","Toujours orienté dans le sens du jeu"] },
-  { key:'PriseBalle',    label:"Prise de balle", levels:[
-    "1ère touche aléatoire","Prise + passe","Prise des 2 pieds",
-    "Prise enchaînée","1ère touche à contre-sens de l'adversaire"] },
-  { key:'Passes',        label:"Passes", levels:[
-    "Cheville non verrouillée","Passe claquée","Passe longue",
-    "Utilise les 2 pieds","Passes rythmées / pied haut du partenaire"] },
-  { key:'ConduiteBalle', label:"Conduite de balle", levels:[
-    "Regarde le ballon en permanence, perd le contrôle en changement de direction",
-    "Conduite yeux au sol, vitesse limitée","Alterne regard ballon/environnement",
-    "Tête relevée, adapte sa vitesse, protège le ballon",
-    "Pleine vitesse tête relevée, change de rythme/direction, 2 pieds"] },
-  { key:'Frappe',        label:"Frappe", levels:[
-    "Pied fort uniquement, appui non orienté","Cherche la puissance avant la précision",
-    "Frappe placée, appui orienté","Frappe des 2 pieds, choisit la surface de frappe",
-    "Frappe en 1 temps, s'adapte à la trajectoire et au gardien, sous pression"] },
-  { key:'Dribble',       label:"Dribble (1v1)", levels:[
-    "Geste unique et répété, subit le duel","Tente une feinte mal exécutée",
-    "Feinte avec changement d'appui","Varie les feintes selon l'adversaire",
-    "Lit le placement du défenseur, enchaîne feinte + accélération"] },
-];
-
-const LEVEL_COLORS = ['--l1','--l2','--l3','--l4','--l5'];
-const LEVEL_BG     = ['--l1-bg','--l2-bg','--l3-bg','--l4-bg','--l5-bg'];
-
-/* ============================================================
-   ÉTAT DE LA SESSION EN COURS (date + évaluateur choisis)
-   sessionRows : { [joueur]: ligne renvoyée par le serveur pour cette date, ou undefined }
-   ============================================================ */
-let sessionRows = {};
-let currentPlayer = null;
-let touchedMap = {};
-
-document.getElementById('sel-date').valueAsDate = new Date();
-
-if (!CONFIG.WEBAPP_URL || CONFIG.WEBAPP_URL.indexOf('PASTE_') === 0) {
-  document.getElementById('config-warning').style.display = 'block';
-}
-
-buildPlayerGrid();
-fillPlayerSelect('sel-joueur-evo', PLAYERS);
-onSessionChange();
-
-function showTab(name){
-  document.getElementById('tab-saisie').style.display = name === 'saisie' ? 'block' : 'none';
-  document.getElementById('tab-evo').style.display = name === 'evo' ? 'block' : 'none';
-  document.getElementById('tab-btn-saisie').classList.toggle('active', name === 'saisie');
-  document.getElementById('tab-btn-evo').classList.toggle('active', name === 'evo');
-}
-
-function fillPlayerSelect(id, players){
-  const sel = document.getElementById(id);
-  sel.innerHTML = '<option value="">— Choisir —</option>' +
-    players.map(p => `<option value="${p}">${p}</option>`).join('');
-}
-
-/* ============================================================
-   GRILLE DES 22 JOUEURS (style "météo")
-   ============================================================ */
-function buildPlayerGrid(){
-  const grid = document.getElementById('player-grid');
-  grid.innerHTML = '';
-  PLAYERS.forEach(name => {
-    const tile = document.createElement('div');
-    tile.className = 'player-tile';
-    tile.id = `tile-${cssId(name)}`;
-    tile.innerHTML = `${name}<span class="sub" id="sub-${cssId(name)}">Non évalué</span>`;
-    tile.onclick = () => openModal(name);
-    grid.appendChild(tile);
-  });
-}
-
-function cssId(name){ return name.replace(/[^a-zA-Z0-9]/g,'_'); }
-
-function setTileStatus(name, statut){
-  const tile = document.getElementById(`tile-${cssId(name)}`);
-  const sub = document.getElementById(`sub-${cssId(name)}`);
-  tile.classList.remove('partial','done');
-  if (statut === 'Complet'){ tile.classList.add('done'); sub.textContent = 'Complet'; }
-  else if (statut === 'Incomplet'){ tile.classList.add('partial'); sub.textContent = 'Incomplet'; }
-  else { sub.textContent = 'Non évalué'; }
-}
-
-/* ============================================================
-   API
-   ============================================================ */
-async function apiGet(params){
-  const url = `${CONFIG.WEBAPP_URL}?${params}`;
-  const res = await fetch(url);
-  return res.json();
-}
-
-async function apiPost(payload){
-  const res = await fetch(CONFIG.WEBAPP_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // évite le preflight CORS
-    body: JSON.stringify(payload)
-  });
-  return res.json();
-}
-
-/* Recharge le statut de chaque joueur pour la date + l'évaluateur sélectionnés.
-   Chaque évaluateur a son propre suivi : Abdoulaye et Tom peuvent noter le même
-   joueur le même jour sans se marcher dessus. */
-async function onSessionChange(){
-  const date = document.getElementById('sel-date').value;
-  const evaluateur = document.getElementById('sel-evaluateur').value;
-  sessionRows = {};
-  PLAYERS.forEach(p => setTileStatus(p, null));
-  if (!date) return;
-
-  try {
-    const rows = await apiGet(`action=evaluations&date=${encodeURIComponent(date)}&evaluateur=${encodeURIComponent(evaluateur)}`);
-    rows.forEach(r => {
-      sessionRows[r.Joueur] = r;
-      setTileStatus(r.Joueur, r.Statut);
+    /* ---------- Navigation ---------- */
+    document.querySelectorAll('nav button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        document.querySelectorAll('nav button').forEach(function (x) { x.classList.remove('actif'); });
+        document.querySelectorAll('.vue').forEach(function (x) { x.classList.remove('active'); });
+        b.classList.add('actif');
+        document.getElementById('vue-' + b.dataset.vue).classList.add('active');
+        if (b.dataset.vue === 'joueurs') chargerJoueurs();
+      });
     });
-  } catch(err){
-    // pas bloquant : la grille reste "non évalué", la saisie fonctionnera quand même
-  }
-}
 
-/* ============================================================
-   MODAL D'ÉVALUATION
-   ============================================================ */
-function openModal(name){
-  currentPlayer = name;
-  touchedMap = {};
-  const date = document.getElementById('sel-date').value;
-  const evaluateur = document.getElementById('sel-evaluateur').value;
-
-  document.getElementById('modal-player-name').textContent = name;
-  document.getElementById('modal-commentaire').value = '';
-  document.getElementById('modal-commentaire').disabled = false;
-  document.getElementById('modal-save-btn').disabled = false;
-  document.getElementById('modal-status').textContent = '';
-  document.getElementById('modal-status').className = '';
-  document.getElementById('history-panel').style.display = 'none';
-  document.getElementById('history-panel').innerHTML = '';
-
-  const existing = sessionRows[name];
-
-  let subText = `${date || '(date non choisie)'} — ${evaluateur}`;
-  if (existing) subText += ` · version actuelle : ${existing.Version}`;
-  document.getElementById('modal-sub').textContent = subText;
-
-  document.getElementById('history-toggle-btn').style.display = existing ? 'inline-block' : 'none';
-
-  const list = document.getElementById('modal-comp-list');
-  list.innerHTML = '';
-  COMPETENCES.forEach(c => {
-    const row = document.createElement('div');
-    row.className = 'comp-row';
-    row.innerHTML = `
-      <div class="comp-head">
-        <span class="name">${c.label}</span>
-        <span class="val" id="modal-val-${c.key}">—</span>
-      </div>
-      <input type="range" min="1" max="5" step="1" value="3" id="modal-range-${c.key}"
-             oninput="updateModalComp('${c.key}', true)">
-      <div class="scale-ticks"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span></div>
-      <div class="comp-desc" id="modal-desc-${c.key}">Non évalué — déplacez le curseur pour noter.</div>
-    `;
-    list.appendChild(row);
-  });
-
-  if (existing){
-    document.getElementById('modal-commentaire').value = existing.Commentaire || '';
-    COMPETENCES.forEach(c => {
-      const v = existing[c.key];
-      if (v !== '' && v !== undefined && v !== null){
-        document.getElementById(`modal-range-${c.key}`).value = v;
-        updateModalComp(c.key, true);
+    /* ---------- Chargement ---------- */
+    function remplirSelect(d, selection) {
+      var sel = document.getElementById('selectMatch');
+      if (!d.matchs.length) {
+        sel.innerHTML = '<option value="">Aucune feuille – générez une convocation</option>';
+        document.getElementById('corpsFeuille').innerHTML =
+          '<tr><td colspan="5" class="chargement">Aucune feuille de match pour l\'instant.</td></tr>';
+        return null;
       }
+      sel.innerHTML = d.matchs.map(function (m) {
+        return '<option value="' + esc(m.id) + '">' + esc(libelleMatch(m)) + '</option>';
+      }).join('');
+      var cible = selection && d.matchs.some(function (m) { return m.id === selection; }) ? selection : null;
+      if (!cible) {
+        if (d.aValider.length) cible = d.aValider[0];
+        else {
+          var prochain = d.matchs.find(function (m) { return m.date >= d.aujourdhui; });
+          cible = (prochain || d.matchs[d.matchs.length - 1]).id;
+        }
+      }
+      sel.value = cible;
+      return cible;
+    }
+
+    function majBandeauAValider() {
+      var d = etat.donnees;
+      var n = d ? d.aValider.length : 0;
+      document.getElementById('pastilleNav').innerHTML = n ? '<span class="pastille">' + n + '</span>' : '';
+      var zone = document.getElementById('bandeauAValider');
+      if (!n) { zone.innerHTML = ''; return; }
+      var courant = etat.feuille && etat.feuille.match.id;
+      var suivante = d.aValider.find(function (id) { return id !== courant; });
+      zone.innerHTML = '<div class="bandeau info"><span>📝 <b>' + n + ' feuille(s) de match</b> jouée(s) à valider.</span>' +
+        (suivante ? '<button class="bouton secondaire" id="btnSuivante">Ouvrir ' +
+          (n > 1 || suivante !== courant ? 'la suivante' : '') + '</button>' : '') + '</div>';
+      var b = document.getElementById('btnSuivante');
+      if (b) b.addEventListener('click', function () { ouvrirFeuille(suivante); });
+    }
+
+    function remplirEquipes(d) {
+      document.getElementById('mEquipe').innerHTML = d.equipes.map(function (e) {
+        return '<option value="' + esc(e.equipe) + '">Équipe ' + esc(e.equipe) + ' (' + esc(e.niveau) + ')</option>';
+      }).join('');
+    }
+
+    function rafraichirDonnees(selection) {
+      return appel('getDonneesInitiales').then(function (d) {
+        etat.donnees = d;
+        remplirEquipes(d);
+        var cible = remplirSelect(d, selection);
+        majBandeauAValider();
+        return cible;
+      });
+    }
+
+    function init() {
+      rafraichirDonnees(null).then(function (cible) { if (cible) chargerFeuille(cible); }).catch(erreur);
+    }
+
+    /* ---------- Feuille de match ---------- */
+    function ouvrirFeuille(id) {
+      if (etat.modifie && !confirm('Des modifications ne sont pas enregistrées. Changer de feuille quand même ?')) {
+        document.getElementById('selectMatch').value = etat.feuille.match.id;
+        return;
+      }
+      document.getElementById('selectMatch').value = id;
+      chargerFeuille(id);
+    }
+    document.getElementById('selectMatch').addEventListener('change', function (e) { ouvrirFeuille(e.target.value); });
+    document.getElementById('filtreConvoques').addEventListener('change', afficherFeuille);
+    ['iType', 'iPhase', 'iJournee'].forEach(function (id) {
+      document.getElementById(id).addEventListener('input', function () { etat.modifie = true; majSynthese(); });
     });
-  }
 
-  updateModalStatusBadge();
-
-  if (existing && existing.Locked){
-    COMPETENCES.forEach(c => { document.getElementById(`modal-range-${c.key}`).disabled = true; });
-    document.getElementById('modal-commentaire').disabled = true;
-    document.getElementById('modal-save-btn').disabled = true;
-    document.getElementById('modal-status').textContent =
-      `Verrouillée : plus de 15 jours se sont écoulés depuis le ${date}. Lecture seule — consultez l'historique ci-dessous si besoin.`;
-    document.getElementById('modal-status').className = 'err';
-  } else {
-    COMPETENCES.forEach(c => { document.getElementById(`modal-range-${c.key}`).disabled = false; });
-  }
-
-  document.getElementById('modal-overlay').classList.add('open');
-}
-
-function closeModal(){
-  document.getElementById('modal-overlay').classList.remove('open');
-  currentPlayer = null;
-}
-
-/* ============================================================
-   HISTORIQUE DES VERSIONS D'UNE ÉVALUATION
-   ============================================================ */
-async function toggleHistory(){
-  const panel = document.getElementById('history-panel');
-  if (panel.style.display === 'block'){
-    panel.style.display = 'none';
-    return;
-  }
-  const date = document.getElementById('sel-date').value;
-  const evaluateur = document.getElementById('sel-evaluateur').value;
-
-  panel.style.display = 'block';
-  panel.innerHTML = '<div class="empty-state">Chargement de l\'historique…</div>';
-
-  try {
-    const rows = await apiGet(
-      `action=history&joueur=${encodeURIComponent(currentPlayer)}&date=${encodeURIComponent(date)}&evaluateur=${encodeURIComponent(evaluateur)}`
-    );
-    if (!rows.length){
-      panel.innerHTML = '<div class="empty-state">Aucun historique disponible.</div>';
-      return;
+    function chargerFeuille(id) {
+      if (!id) return;
+      document.getElementById('corpsFeuille').innerHTML = '<tr><td colspan="5" class="chargement">Vérification des règles…</td></tr>';
+      appel('getFeuilleMatch', id).then(function (f) {
+        etat.feuille = f;
+        etat.modifie = false;
+        afficherFeuille();
+        majBandeauAValider();
+      }).catch(erreur);
     }
-    let html = '<table class="evo"><tr><th>Version</th><th>Enregistrée le</th><th>Statut</th><th>Moyenne</th></tr>';
-    rows.forEach((r, i) => {
-      const ts = new Date(r.Horodatage).toLocaleString('fr-FR');
-      html += `<tr><td>${r.Version}${i === 0 ? ' (actuelle)' : ''}</td><td>${ts}</td><td>${r.Statut}</td><td>${r.Moyenne}</td></tr>`;
+
+    function afficherFeuille() {
+      var f = etat.feuille;
+      if (!f) return;
+      var m = f.match;
+      var verrou = estValide(m);
+
+      var classeStatut = verrou ? 'valide' : (m.statut === 'À valider' ? 'avalider' : 'autre');
+      document.getElementById('statutMatch').innerHTML = '<span class="statut ' + classeStatut + '">' +
+        (ICONE_STATUT[m.statut] || '') + ' ' + esc(m.statut) +
+        (verrou && m.valideLe ? ' le ' + esc(fr(m.valideLe)) : '') + '</span>';
+      document.getElementById('iType').value = m.type;
+      document.getElementById('iPhase').value = m.phase || '';
+      document.getElementById('iJournee').value = m.journee || '';
+      ['iType', 'iPhase', 'iJournee'].forEach(function (id) { document.getElementById(id).disabled = verrou; });
+
+      document.getElementById('infoMatch').innerHTML =
+        'Équipe <b>' + esc(m.equipe) + '</b> · ' + esc(fr(m.date)) + (m.heure ? ' à ' + esc(m.heure) : '') +
+        (m.adversaire ? ' · ' + esc(m.adversaire) : '') + (m.lieu ? ' · ' + esc(m.lieu) : '') +
+        ' · Équipe(s) supérieure(s) contrôlée(s) : ' + (f.superieures.length ? f.superieures.map(esc).join(', ') : 'aucune');
+
+      var seulConv = document.getElementById('filtreConvoques').checked;
+      var lignes = f.lignes.filter(function (l) { return !seulConv || l.convoque || l.entre; });
+      var corps = document.getElementById('corpsFeuille');
+      var dis = verrou ? ' disabled' : '';
+      if (!lignes.length) {
+        corps.innerHTML = '<tr><td colspan="5" class="chargement">' +
+          (seulConv ? 'Aucun convoqué. Décochez « Seulement les convoqués » pour voir tout l\'effectif.' : 'Aucun joueur.') +
+          '</td></tr>';
+      } else {
+        corps.innerHTML = lignes.map(function (l) {
+          var conv = l.convoque || l.entre;
+          var classe = conv && l.niveau === 'BLOQUE' ? ' class="convoque-bloque"' : '';
+          var motifs = l.motifs.length
+            ? '<ul class="motifs">' + l.motifs.map(function (x) {
+                return '<li><b>Règle ' + x.regle + ' :</b> ' + esc(x.message) + '</li>';
+              }).join('') + '</ul>'
+            : '<span class="sous">—</span>';
+          return '<tr' + classe + ' data-licence="' + esc(l.licence) + '">' +
+            '<td><div class="nom">' + esc(nomComplet(l)) + '</div><div class="sous">' +
+              esc(l.categorie || 'Catégorie à compléter') +
+              (l.licenceReelle ? ' · ' + esc(l.licenceReelle) : '') + '</div></td>' +
+            '<td><span class="badge ' + l.niveau + '">' + ICONES[l.niveau] + '</span></td>' +
+            '<td>' + motifs + '</td>' +
+            '<td class="centre"><input type="checkbox" data-champ="convoque"' + (conv ? ' checked' : '') + dis + '></td>' +
+            '<td class="centre"><input type="checkbox" data-champ="entre"' + (l.entre ? ' checked' : '') + dis + '></td>' +
+            '</tr>';
+        }).join('');
+      }
+      majSynthese();
+    }
+
+    document.getElementById('corpsFeuille').addEventListener('change', function (e) {
+      var cb = e.target;
+      if (!cb.dataset || !cb.dataset.champ || estValide(etat.feuille.match)) return;
+      var tr = cb.closest('tr');
+      var ligne = etat.feuille.lignes.find(function (l) { return l.licence === tr.dataset.licence; });
+      if (!ligne) return;
+      ligne[cb.dataset.champ] = cb.checked;
+      if (cb.dataset.champ === 'entre' && cb.checked) ligne.convoque = true;
+      if (cb.dataset.champ === 'convoque' && !cb.checked) ligne.entre = false;
+      etat.modifie = true;
+      afficherFeuille();
     });
-    html += '</table>';
-    panel.innerHTML = html;
-  } catch(err){
-    panel.innerHTML = '<div class="empty-state">Impossible de charger l\'historique.</div>';
-  }
-}
 
-function updateModalComp(key, mark){
-  if (mark) touchedMap[key] = true;
-  const comp = COMPETENCES.find(c => c.key === key);
-  const val = Number(document.getElementById(`modal-range-${key}`).value);
-  const badge = document.getElementById(`modal-val-${key}`);
-  const desc = document.getElementById(`modal-desc-${key}`);
+    function majSynthese() {
+      var f = etat.feuille;
+      var verrou = estValide(f.match);
+      var sur = f.lignes.filter(function (l) { return l.convoque || l.entre; });
+      var bloques = sur.filter(function (l) { return l.niveau === 'BLOQUE'; });
+      var habitues = sur.filter(function (l) { return l.habitue; });
+      var entres = sur.filter(function (l) { return l.entre; });
 
-  if (!touchedMap[key]){
-    badge.textContent = '—';
-    badge.style.color = 'var(--ink-soft)';
-    badge.style.background = 'var(--status-none-bg)';
-    desc.textContent = 'Non évalué — déplacez le curseur pour noter.';
-    desc.classList.add('muted');
-    return;
-  }
+      var html = '';
+      (f.avertissements || []).forEach(function (a) {
+        if (!verrou) html += '<div class="bandeau alerte">⚠️ ' + esc(a) + '</div>';
+      });
+      var messages = [];
+      var classe = 'ok';
+      if (bloques.length) {
+        classe = 'bloque';
+        messages.push('⛔ ' + bloques.length + ' joueur(s) sur la feuille ne peuvent pas jouer : ' +
+          bloques.map(function (l) { return esc(nomComplet(l)); }).join(', ') + '.');
+      }
+      if (f.regle3Active && habitues.length > f.maxHabitues) {
+        classe = 'bloque';
+        messages.push('⛔ Règle 3 : ' + habitues.length + ' joueurs ont plus de ' + f.seuil +
+          ' matchs en équipe supérieure (maximum ' + f.maxHabitues + ' sur la feuille).');
+      } else if (habitues.length) {
+        if (classe === 'ok') classe = 'alerte';
+        messages.push('⚠️ Règle 3 : ' + habitues.length + ' / ' + f.maxHabitues + ' joueur(s) du quota sur la feuille.');
+      }
+      if (!messages.length) {
+        messages.push(sur.length ? '✅ Feuille conforme aux règles 1 à 4.' : 'Aucun joueur convoqué pour ce match.');
+      }
+      html += '<div class="bandeau ' + classe + '">' + messages.join('<br>') + '</div>';
+      document.getElementById('bandeau').innerHTML = html;
 
-  const colorVar = getComputedStyle(document.documentElement).getPropertyValue(LEVEL_COLORS[val-1]);
-  const bgVar = getComputedStyle(document.documentElement).getPropertyValue(LEVEL_BG[val-1]);
-  badge.textContent = val;
-  badge.style.color = colorVar;
-  badge.style.background = bgVar;
-  const label = comp.levels[val-1];
-  if (label){
-    desc.textContent = label;
-    desc.classList.remove('muted');
-  } else {
-    desc.textContent = 'Repère non défini pour ce niveau — à compléter dans la grille.';
-    desc.classList.add('muted');
-  }
-  updateModalStatusBadge();
-}
-
-function updateModalStatusBadge(){
-  const badge = document.getElementById('modal-status-badge');
-  const count = Object.keys(touchedMap).filter(k => touchedMap[k]).length;
-  if (count === 0){
-    badge.textContent = 'Non évalué';
-    badge.style.color = 'var(--status-none)';
-    badge.style.background = 'var(--status-none-bg)';
-  } else if (count < COMPETENCES.length){
-    badge.textContent = `Incomplet (${count}/${COMPETENCES.length})`;
-    badge.style.color = 'var(--status-partial)';
-    badge.style.background = 'var(--status-partial-bg)';
-  } else {
-    badge.textContent = 'Complet';
-    badge.style.color = 'var(--status-done)';
-    badge.style.background = 'var(--status-done-bg)';
-  }
-}
-
-async function saveModalEvaluation(){
-  const date = document.getElementById('sel-date').value;
-  const evaluateur = document.getElementById('sel-evaluateur').value;
-  const commentaire = document.getElementById('modal-commentaire').value;
-  const statusEl = document.getElementById('modal-status');
-  const btn = document.getElementById('modal-save-btn');
-
-  if (!date){
-    statusEl.textContent = 'Merci de choisir une date de session avant de noter un joueur.';
-    statusEl.className = 'err';
-    return;
-  }
-
-  const scores = {};
-  COMPETENCES.forEach(c => {
-    if (touchedMap[c.key]){
-      scores[c.key] = Number(document.getElementById(`modal-range-${c.key}`).value);
+      document.getElementById('compteur').textContent =
+        sur.length + ' convoqué(s) · ' + entres.length + ' entré(s) en jeu';
+      document.getElementById('etatModif').innerHTML = etat.modifie ? '<span class="modifie">Non enregistré</span>' : '';
+      document.getElementById('btnEnregistrer').style.display = verrou ? 'none' : '';
+      document.getElementById('btnValider').style.display = verrou ? 'none' : '';
+      document.getElementById('btnRouvrir').style.display = verrou ? '' : 'none';
+      document.getElementById('btnEnregistrer').disabled = !etat.modifie;
     }
-  });
 
-  btn.disabled = true;
-  statusEl.textContent = 'Enregistrement…';
-  statusEl.className = '';
-
-  try {
-    const result = await apiPost({ joueur: currentPlayer, date, evaluateur, scores, commentaire });
-    if (result.success){
-      sessionRows[currentPlayer] = result.row;
-      setTileStatus(currentPlayer, result.row.Statut);
-      statusEl.textContent = 'Enregistré.';
-      statusEl.className = 'ok';
-    } else {
-      throw new Error(result.error || 'Erreur inconnue');
+    function lignesAEnvoyer() {
+      return etat.feuille.lignes
+        .filter(function (l) { return l.convoque || l.entre; })
+        .map(function (l) { return { licence: l.licence, convoque: !!l.convoque, entre: !!l.entre }; });
     }
-  } catch(err){
-    statusEl.textContent = err.message && err.message !== 'Erreur inconnue'
-      ? err.message
-      : "Échec de l'enregistrement — vérifiez la configuration de l'URL Apps Script.";
-    statusEl.className = 'err';
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-/* ============================================================
-   EVOLUTION
-   ============================================================ */
-let evoData = [];
-let selectedDates = [];
-let radarChart = null;
-
-document.getElementById('sel-joueur-evo').addEventListener('change', loadEvolution);
-
-async function loadEvolution(){
-  const joueur = document.getElementById('sel-joueur-evo').value;
-  document.getElementById('evo-dates-wrap').style.display = 'none';
-  document.getElementById('evo-chart-card').style.display = 'none';
-  document.getElementById('evo-empty').style.display = 'none';
-  if (!joueur) return;
-
-  try {
-    evoData = await apiGet(`action=evaluations&joueur=${encodeURIComponent(joueur)}`);
-  } catch(err){
-    evoData = [];
-  }
-  evoData.sort((a,b) => a.Date.localeCompare(b.Date));
-
-  if (!evoData.length){
-    document.getElementById('evo-empty').style.display = 'block';
-    return;
-  }
-
-  selectedDates = evoData.slice(-2).map(e => e.Date);
-  renderChips();
-  renderRadarAndTable();
-  document.getElementById('evo-dates-wrap').style.display = 'block';
-  document.getElementById('evo-chart-card').style.display = 'block';
-}
-
-function renderChips(){
-  const wrap = document.getElementById('evo-chips');
-  wrap.innerHTML = '';
-  evoData.forEach(e => {
-    const chip = document.createElement('div');
-    const isSelected = selectedDates.includes(e.Date);
-    chip.className = 'chip' + (isSelected ? ' selected' : '');
-    chip.textContent = `${e.Date} (${e.Evaluateur || '—'})${e.Statut === 'Incomplet' ? ' ⚠' : ''}${e.Locked ? ' 🔒' : ''}`;
-    chip.onclick = () => toggleDate(e.Date);
-    wrap.appendChild(chip);
-  });
-}
-
-function toggleDate(date){
-  if (selectedDates.includes(date)){
-    selectedDates = selectedDates.filter(d => d !== date);
-  } else {
-    if (selectedDates.length >= 3) selectedDates.shift();
-    selectedDates.push(date);
-  }
-  renderChips();
-  renderRadarAndTable();
-}
-
-const CHART_COLORS = ['#12324F', '#2E6FA6', '#D6484B'];
-
-function renderRadarAndTable(){
-  const ctx = document.getElementById('radar-canvas').getContext('2d');
-  const labels = COMPETENCES.map(c => c.label);
-
-  const datasets = selectedDates.map((date, i) => {
-    const evalRow = evoData.find(e => e.Date === date);
-    const color = CHART_COLORS[i % CHART_COLORS.length];
-    return {
-      label: date,
-      data: COMPETENCES.map(c => Number(evalRow[c.key]) || 0),
-      borderColor: color,
-      backgroundColor: color + '26',
-      pointBackgroundColor: color,
-      borderWidth: 2
-    };
-  });
-
-  if (radarChart) radarChart.destroy();
-  radarChart = new Chart(ctx, {
-    type: 'radar',
-    data: { labels, datasets },
-    options: {
-      scales: { r: { min:0, max:5, ticks:{ stepSize:1 }, pointLabels:{ font:{ size:11 } } } },
-      plugins: { legend: { position:'bottom' } }
+    function infosAEnvoyer() {
+      return {
+        type: document.getElementById('iType').value,
+        phase: document.getElementById('iPhase').value.trim(),
+        journee: document.getElementById('iJournee').value
+      };
     }
-  });
+    function apresSauvegarde(nf, message) {
+      etat.feuille = nf;
+      etat.modifie = false;
+      afficherFeuille();
+      toast(message);
+      return rafraichirDonnees(nf.match.id).then(majBandeauAValider);
+    }
+    function verrouillerBoutons(on) {
+      ['btnEnregistrer', 'btnValider', 'btnRouvrir'].forEach(function (id) { document.getElementById(id).disabled = on; });
+    }
 
-  const table = document.getElementById('evo-table');
-  let html = '<tr><th>Compétence</th>' + selectedDates.map(d => `<th>${d}</th>`).join('') +
-    (selectedDates.length >= 2 ? '<th>Évolution</th>' : '') + '</tr>';
-  COMPETENCES.forEach(c => {
-    const vals = selectedDates.map(date => {
-      const row = evoData.find(e => e.Date === date);
-      return Number(row[c.key]) || 0;
+    document.getElementById('btnEnregistrer').addEventListener('click', function () {
+      verrouillerBoutons(true);
+      appel('enregistrerFeuille', etat.feuille.match.id, lignesAEnvoyer(), infosAEnvoyer())
+        .then(function (nf) { return apresSauvegarde(nf, 'Feuille enregistrée.'); })
+        .catch(erreur)
+        .then(function () { verrouillerBoutons(false); majSynthese(); });
     });
-    let deltaCell = '';
-    if (vals.length >= 2){
-      const delta = vals[vals.length-1] - vals[0];
-      const cls = delta > 0 ? 'up' : (delta < 0 ? 'down' : 'flat');
-      const sign = delta > 0 ? '+' : '';
-      deltaCell = `<td class="delta ${cls}">${sign}${delta}</td>`;
-    }
-    html += `<tr><td>${c.label}</td>${vals.map(v => `<td>${v}</td>`).join('')}${deltaCell}</tr>`;
-  });
-  table.innerHTML = html;
-}
 
-/* ============================================================
-   EXPORT PDF DU RADAR
-   ============================================================ */
-async function downloadPDF(){
-  if (!selectedDates.length){ return; }
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation:'portrait', unit:'pt', format:'a4' });
-  const joueur = document.getElementById('sel-joueur-evo').value;
-  const canvas = document.getElementById('radar-canvas');
-  const imgData = canvas.toDataURL('image/png', 1.0);
-
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 40;
-  const imgWidth = pageWidth - margin * 2;
-  const imgHeight = imgWidth * (canvas.height / canvas.width);
-
-  doc.setFontSize(16);
-  doc.text(`Suivi individuel — ${joueur}`, margin, 46);
-  doc.setFontSize(10);
-  doc.setTextColor(90);
-  doc.text(`Évaluations comparées : ${selectedDates.join('  ·  ')}`, margin, 64);
-  doc.addImage(imgData, 'PNG', margin, 84, imgWidth, imgHeight);
-
-  let y = 84 + imgHeight + 30;
-  doc.setTextColor(20);
-  doc.setFontSize(11);
-  doc.text('Compétence', margin, y);
-  selectedDates.forEach((d, i) => doc.text(d, margin + 200 + i * 90, y));
-  y += 8;
-  doc.setDrawColor(220);
-  doc.line(margin, y, pageWidth - margin, y);
-  y += 16;
-
-  doc.setFontSize(10);
-  COMPETENCES.forEach(c => {
-    if (y > doc.internal.pageSize.getHeight() - 40){
-      doc.addPage();
-      y = 50;
-    }
-    doc.text(c.label, margin, y);
-    selectedDates.forEach((date, i) => {
-      const row = evoData.find(e => e.Date === date);
-      const val = Number(row[c.key]) || 0;
-      doc.text(String(val || '—'), margin + 200 + i * 90, y);
+    document.getElementById('btnValider').addEventListener('click', function () {
+      var infos = infosAEnvoyer();
+      var lignes = lignesAEnvoyer();
+      if (infos.type === 'Championnat' && !infos.journee) return toast('Renseignez la journée avant de valider.');
+      var entres = lignes.filter(function (l) { return l.entre; }).length;
+      if (!entres) return toast('Cochez « Entré en jeu » pour les joueurs qui ont joué.');
+      var bloques = etat.feuille.lignes.filter(function (l) { return l.entre && l.niveau === 'BLOQUE'; }).length;
+      var question = 'Valider définitivement cette feuille ?\n' + entres + ' joueur(s) entré(s) en jeu.' +
+        (bloques ? '\n\nAttention : ' + bloques + ' joueur(s) bloqué(s) par une règle ont été cochés.' : '') +
+        '\n\nElle sera verrouillée (bouton « Rouvrir » pour corriger).';
+      if (!confirm(question)) return;
+      verrouillerBoutons(true);
+      appel('validerFeuille', etat.feuille.match.id, lignes, infos)
+        .then(function (nf) { return apresSauvegarde(nf, 'Feuille validée et verrouillée.'); })
+        .catch(erreur)
+        .then(function () { verrouillerBoutons(false); majSynthese(); });
     });
-    y += 18;
-  });
 
-  doc.save(`${joueur.replace(/\s+/g,'_')}-evolution.pdf`);
-}
-</script>
+    document.getElementById('btnRouvrir').addEventListener('click', function () {
+      if (!confirm('Rouvrir cette feuille pour la corriger ? Pensez à la valider de nouveau ensuite.')) return;
+      verrouillerBoutons(true);
+      appel('rouvrirFeuille', etat.feuille.match.id)
+        .then(function (nf) { return apresSauvegarde(nf, 'Feuille rouverte.'); })
+        .catch(erreur)
+        .then(function () { verrouillerBoutons(false); majSynthese(); });
+    });
+
+    /* ---------- Tableau des joueurs ---------- */
+    function chargerJoueurs() {
+      document.getElementById('corpsJoueurs').innerHTML = '<tr><td class="chargement">Chargement…</td></tr>';
+      appel('getTableauJoueurs').then(function (t) {
+        document.getElementById('enteteJoueurs').innerHTML = '<tr><th>Joueur</th><th class="optionnel">Catégorie</th>' +
+          t.equipes.map(function (e) { return '<th class="centre">Équipe ' + esc(e) + '</th>'; }).join('') +
+          '<th class="centre">Total</th></tr>';
+        document.getElementById('corpsJoueurs').innerHTML = t.lignes.length ? t.lignes.map(function (l) {
+          var total = 0;
+          var cellules = t.equipes.map(function (e) {
+            var n = l.parEquipe[e] || 0;
+            total += n;
+            var depasse = t.equipesSup.indexOf(e) !== -1 && n > t.seuil;
+            return '<td class="centre' + (depasse ? ' depasse' : '') + '">' + n + (depasse ? ' ⚠️' : '') + '</td>';
+          }).join('');
+          return '<tr><td><span class="nom">' + esc(nomComplet(l)) + '</span></td>' +
+            '<td class="optionnel">' + esc(l.categorie || '—') + '</td>' + cellules +
+            '<td class="centre"><b>' + total + '</b></td></tr>';
+        }).join('') : '<tr><td class="chargement">Aucun joueur actif.</td></tr>';
+        document.getElementById('legendeJoueurs').textContent =
+          'Matchs où le joueur est entré en jeu, sur les ' + t.nbValidees + ' feuille(s) validée(s). ⚠️ = plus de ' +
+          t.seuil + ' matchs avec une équipe supérieure : il compte dans le quota de la règle 3 quand il joue plus bas.';
+      }).catch(erreur);
+    }
+
+    /* ---------- Ajouts ---------- */
+    document.getElementById('btnAjouterMatch').addEventListener('click', function () {
+      var m = {
+        date: document.getElementById('mDate').value,
+        equipe: document.getElementById('mEquipe').value,
+        type: document.getElementById('mType').value,
+        phase: document.getElementById('mPhase').value.trim() || '1',
+        journee: document.getElementById('mJournee').value,
+        adversaire: document.getElementById('mAdversaire').value.trim(),
+        lieu: document.getElementById('mLieu').value
+      };
+      if (!m.date) return toast('Indiquez la date du match.');
+      appel('ajouterMatch', m).then(function () {
+        document.getElementById('mAdversaire').value = '';
+        document.getElementById('mJournee').value = '';
+        toast('Match ajouté.');
+        return rafraichirDonnees(etat.feuille ? etat.feuille.match.id : null);
+      }).catch(erreur);
+    });
+
+    document.getElementById('btnAjouterJoueur').addEventListener('click', function () {
+      var j = {
+        licence: document.getElementById('jLicence').value.trim(),
+        nom: document.getElementById('jNom').value.trim(),
+        prenom: document.getElementById('jPrenom').value.trim(),
+        categorie: document.getElementById('jCategorie').value
+      };
+      if (!j.prenom) return toast('Le prénom est obligatoire.');
+      appel('ajouterJoueur', j).then(function () {
+        ['jLicence', 'jNom', 'jPrenom'].forEach(function (id) { document.getElementById(id).value = ''; });
+        if (etat.feuille) chargerFeuille(etat.feuille.match.id);
+        toast('Joueur ajouté.');
+      }).catch(erreur);
+    });
+
+    init();
+  </script>
 </body>
 </html>
