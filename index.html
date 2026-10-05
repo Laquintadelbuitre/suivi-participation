@@ -283,11 +283,45 @@
     var etat = { donnees: null, feuille: null, modifie: false };
 
     /* ---------- Utilitaires ---------- */
+    // Page servie par Apps Script → google.script.run ; page sur GitHub → appel HTTP au script.
+    var SUIVI_API_URL = 'https://script.google.com/macros/s/AKfycbz4OQYwNWZKlaWFUUoqzhKcrcC9ric8wcPYEwpbj2HAZxgRueJr9AwlpvnEo9E8K5wRhQ/exec';
+    var CLE_STOCKAGE = 'suiviU13_cle';
+    function lireCle() { try { return localStorage.getItem(CLE_STOCKAGE) || ''; } catch (e) { return ''; } }
+    function ecrireCle(v) { try { v ? localStorage.setItem(CLE_STOCKAGE, v) : localStorage.removeItem(CLE_STOCKAGE); } catch (e) {} }
+    function demanderCle() {
+      var v = window.prompt('Code d\'accès au suivi U13 :', '');
+      if (v) ecrireCle(v.trim());
+      return v ? v.trim() : '';
+    }
     function appel(fn) {
       var args = Array.prototype.slice.call(arguments, 1);
-      return new Promise(function (resolve, reject) {
-        var r = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
-        r[fn].apply(r, args);
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        return new Promise(function (resolve, reject) {
+          var r = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+          r[fn].apply(r, args);
+        });
+      }
+      return appelHttp(fn, args, false);
+    }
+    function appelHttp(fn, args, dejaRedemande) {
+      var cle = lireCle() || demanderCle();
+      return fetch(SUIVI_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'api', pwd: cle, fn: fn, args: args })
+      }).then(function (rep) {
+        return rep.text();
+      }).then(function (txt) {
+        var data;
+        try { data = JSON.parse(txt); }
+        catch (e) { throw new Error('Réponse inattendue du script (vérifiez le déploiement « Tout le monde »).'); }
+        if (data && data.ok) return data.resultat;
+        var msg = (data && data.erreur) || 'Erreur inconnue';
+        if (/mot de passe/i.test(msg) && !dejaRedemande) {
+          ecrireCle('');
+          if (demanderCle()) return appelHttp(fn, args, true);
+        }
+        throw new Error(msg);
       });
     }
     function esc(s) {
