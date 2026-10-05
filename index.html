@@ -69,6 +69,20 @@
       background: var(--bloque); color: #fff; font-size: 12px; font-weight: 700; text-align: center;
     }
     main { padding: 16px; max-width: 1200px; margin: 0 auto; }
+    .grille-convoques { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin-top: 10px; }
+    .grille-convoques label { flex-direction: row; align-items: center; gap: 8px; font-size: 14px; color: inherit;
+      border: 1px solid var(--bord, #ddd); border-radius: 8px; padding: 6px 8px; cursor: pointer; }
+    .grille-convoques label.coche { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+    .grille-convoques small { color: var(--doux); margin-left: auto; }
+    .titre-convoques { font-size: 15px; margin: 18px 0 8px; display: flex; align-items: center; gap: 8px; }
+    .badge-compte { background: var(--accent); color: #fff; font-weight: 600; border-radius: 999px; padding: 1px 9px; font-size: 13px; }
+    textarea { font: inherit; padding: 8px; border-radius: 8px; border: 1px solid var(--bord, #ccc); background: inherit; color: inherit; resize: vertical; }
+    .zone-image { display: flex; gap: 14px; align-items: center; border: 2px dashed var(--bord); border-radius: 10px;
+      padding: 12px 14px; margin-bottom: 14px; cursor: pointer; }
+    .zone-image.survol { border-color: var(--accent); background: var(--info-fond); }
+    .zone-image img { width: 160px; max-height: 90px; object-fit: contain; border-radius: 6px; border: 1px solid var(--bord); }
+    .etat-image { display: block; margin-top: 4px; font-size: 13px; }
+    .etat-image.ok { color: var(--ok); } .etat-image.alerte { color: var(--alerte); }
     .vue { display: none; }
     .vue.active { display: block; }
     .carte {
@@ -239,21 +253,47 @@
     <!-- ============ AJOUTER ============ -->
     <section id="vue-ajouter" class="vue">
       <div class="carte">
-        <h2>Ajouter un match à la main</h2>
-        <p class="sous" style="margin-top:-6px">Inutile pour les matchs convoqués : ils arrivent automatiquement.
-          À utiliser pour une rencontre sans convocation (ex. coupe).</p>
+        <h2>Ajouter une feuille de match à la main</h2>
+        <p class="sous" style="margin-top:-6px">Pour une convocation déjà envoyée (ou un match sans convocation) :
+          reportez la date, l'adversaire, l'équipe et les enfants convoqués.</p>
+        <div id="zoneImage" class="zone-image" tabindex="0">
+          <input type="file" id="mImage" accept="image/*" hidden>
+          <img id="apercuImage" alt="" hidden>
+          <div>
+            <b>📷 Déposer l'image de la convocation</b>
+            <span class="sous" style="display:block;margin:2px 0 0">Glisser-déposer, coller (⌘V / Ctrl+V) ou
+              <a href="#" id="lienChoisirImage">choisir un fichier</a>. Date, adversaire, heure et enfants sont lus
+              automatiquement ; l'équipe reste à choisir.</span>
+            <span id="etatImage" class="etat-image"></span>
+          </div>
+        </div>
         <div class="grille">
-          <label>Date<input type="date" id="mDate"></label>
-          <label>Équipe<select id="mEquipe"></select></label>
+          <label>Date *<input type="date" id="mDate"></label>
+          <label>Équipe *<select id="mEquipe"></select></label>
+          <label>Adversaire<input type="text" id="mAdversaire" placeholder="ex. JS Lafarge"></label>
+          <label>Lieu<select id="mLieu"><option>Domicile</option><option>Extérieur</option></select></label>
+          <label>Heure de RDV<input type="text" id="mHeure" placeholder="ex. 9h00"></label>
           <label>Type
             <select id="mType"><option>Championnat</option><option>Coupe</option></select>
           </label>
           <label>Phase<input type="text" id="mPhase" value="1"></label>
           <label>Journée<input type="number" id="mJournee" min="1"></label>
-          <label>Adversaire<input type="text" id="mAdversaire"></label>
-          <label>Lieu<select id="mLieu"><option>Domicile</option><option>Extérieur</option></select></label>
         </div>
-        <div class="pied"><span></span><button class="bouton" id="btnAjouterMatch">Ajouter le match</button></div>
+
+        <h3 class="titre-convoques">Enfants convoqués <span id="compteConvoques" class="badge-compte">0</span></h3>
+        <label>Coller la liste de la convocation (facultatif)
+          <textarea id="mListe" rows="3" placeholder="1. Sebastien  2. Kalifa  3. Mathis …"></textarea>
+        </label>
+        <div class="pied" style="margin-top:6px">
+          <span id="mNonReconnus" class="sous" style="margin:0"></span>
+          <span style="display:flex;gap:8px">
+            <button class="bouton secondaire" id="btnViderConvoques">Tout décocher</button>
+            <button class="bouton secondaire" id="btnReconnaitre">Cocher les noms collés</button>
+          </span>
+        </div>
+        <div id="grilleConvoques" class="grille-convoques"></div>
+
+        <div class="pied"><span></span><button class="bouton" id="btnAjouterMatch">Créer la feuille de match</button></div>
       </div>
 
       <div class="carte">
@@ -424,10 +464,70 @@
     }
 
     function remplirEquipes(d) {
-      document.getElementById('mEquipe').innerHTML = d.equipes.map(function (e) {
+      var sel = document.getElementById('mEquipe');
+      var avant = sel.value;
+      sel.innerHTML = '<option value="">— choisir 1, 2 ou 3 —</option>' + d.equipes.map(function (e) {
         return '<option value="' + esc(e.equipe) + '">Équipe ' + esc(e.equipe) + ' (' + esc(e.niveau) + ')</option>';
       }).join('');
+      sel.value = avant;
+      remplirConvoques(d);
     }
+
+    /* ---------- Saisie manuelle : enfants convoqués ---------- */
+    function cleNom(s) {
+      return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+        .replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+    function remplirConvoques(d) {
+      var grille = document.getElementById('grilleConvoques');
+      var coches = {};
+      grille.querySelectorAll('input:checked').forEach(function (c) { coches[c.value] = true; });
+      grille.innerHTML = d.joueurs.map(function (j) {
+        var c = coches[j.licence];
+        return '<label class="' + (c ? 'coche' : '') + '"><input type="checkbox" value="' + esc(j.licence) + '"' +
+          (c ? ' checked' : '') + '>' + esc(nomComplet(j)) + '<small>' + esc(j.categorie || '') + '</small></label>';
+      }).join('');
+      majCompteConvoques();
+    }
+    function majCompteConvoques() {
+      var n = 0;
+      document.querySelectorAll('#grilleConvoques input').forEach(function (c) {
+        c.parentNode.classList.toggle('coche', c.checked);
+        if (c.checked) n++;
+      });
+      document.getElementById('compteConvoques').textContent = n;
+    }
+    document.getElementById('grilleConvoques').addEventListener('change', majCompteConvoques);
+    document.getElementById('btnViderConvoques').addEventListener('click', function () {
+      document.querySelectorAll('#grilleConvoques input').forEach(function (c) { c.checked = false; });
+      document.getElementById('mNonReconnus').textContent = '';
+      majCompteConvoques();
+    });
+    function noms(texte) {
+      // « 1. Sebastien 2. Kalifa », une ligne par nom, ou séparés par des virgules
+      return String(texte || '').replace(/\*/g, ' ')
+        .split(/(?:^|\s)\d{1,2}\s*[.)\-:]\s*|[\n,;•]+/)
+        .map(function (x) { return x.trim(); }).filter(Boolean);
+    }
+    document.getElementById('btnReconnaitre').addEventListener('click', function () {
+      var joueurs = (etat.donnees && etat.donnees.joueurs) || [];
+      var index = {};
+      joueurs.forEach(function (j) {
+        index[cleNom(j.prenom)] = index[cleNom(j.prenom)] || j.licence;
+        index[cleNom(nomComplet(j))] = j.licence;
+        if (j.licenceReelle) index[cleNom(j.licenceReelle)] = j.licence;
+      });
+      var inconnus = [], trouves = 0;
+      noms(document.getElementById('mListe').value).forEach(function (n) {
+        var lic = index[cleNom(n)];
+        if (!lic) { inconnus.push(n); return; }
+        var c = document.querySelector('#grilleConvoques input[value="' + lic.replace(/"/g, '\\"') + '"]');
+        if (c) { c.checked = true; trouves++; }
+      });
+      majCompteConvoques();
+      document.getElementById('mNonReconnus').textContent = trouves + ' enfant(s) coché(s)' +
+        (inconnus.length ? ' · non reconnu(s) : ' + inconnus.join(', ') + ' (ajoutez-le(s) ci-dessous ou cochez à la main)' : '');
+    });
 
     function rafraichirDonnees(selection) {
       return appel('getDonneesInitiales').then(function (d) {
@@ -758,8 +858,173 @@
       }).catch(erreur).then(function () { btn.disabled = false; });
     });
 
+
+    /* ---------- Lecture de l'image de convocation (OCR dans le navigateur) ---------- */
+    var TESSERACT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+    var tesseractPret = null;
+    function chargerTesseract() {
+      if (window.Tesseract) return Promise.resolve();
+      if (!tesseractPret) {
+        tesseractPret = new Promise(function (ok, ko) {
+          var sc = document.createElement('script');
+          sc.src = TESSERACT_URL;
+          sc.onload = ok;
+          sc.onerror = function () { tesseractPret = null; ko(new Error('Lecture d\'image indisponible (pas de connexion ?)')); };
+          document.head.appendChild(sc);
+        });
+      }
+      return tesseractPret;
+    }
+    function etatImage(msg, classe) {
+      var e = document.getElementById('etatImage');
+      e.textContent = msg || '';
+      e.className = 'etat-image' + (classe ? ' ' + classe : '');
+    }
+    function distance(a, b) {
+      if (Math.abs(a.length - b.length) > 1) return 2;
+      var d = [];
+      for (var i = 0; i <= a.length; i++) { d[i] = [i]; }
+      for (var j = 1; j <= b.length; j++) d[0][j] = j;
+      for (i = 1; i <= a.length; i++) for (j = 1; j <= b.length; j++) {
+        d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      }
+      return d[a.length][b.length];
+    }
+    function motsProches(a, b) { return a === b || (a.length >= 5 && distance(a, b) <= 1); }
+    /** Retrouve un joueur de l'effectif au début d'un texte lu (tolère une faute de lecture). */
+    function trouverJoueur(texte) {
+      var mots = cleNom(texte).split(' ').filter(Boolean);
+      if (!mots.length) return null;
+      var candidats = ((etat.donnees && etat.donnees.joueurs) || []).map(function (j) {
+        return { j: j, mots: cleNom(nomComplet(j)).split(' ') , prenom: cleNom(j.prenom).split(' ') };
+      });
+      var meilleur = null;
+      candidats.forEach(function (c) {
+        [c.mots, c.prenom].forEach(function (cible) {
+          if (cible.length > mots.length) return;
+          for (var k = 0; k < cible.length; k++) if (!motsProches(cible[k], mots[k])) return;
+          if (!meilleur || cible.length > meilleur.n) meilleur = { j: c.j, n: cible.length };
+        });
+      });
+      return meilleur ? meilleur.j : null;
+    }
+    var MOIS = { janvier: 1, fevrier: 2, mars: 3, avril: 4, mai: 5, juin: 6, juillet: 7, aout: 8, septembre: 9,
+      octobre: 10, novembre: 11, decembre: 12 };
+    function analyserConvocation(data) {
+      var texte = data.text || '';
+      var plat = cleNom(texte);
+      var r = { date: '', heure: '', adversaire: '', attendus: 0, joueurs: [], inconnus: [] };
+
+      var md = plat.match(/\b(\d{1,2})(?:er)? (janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre)(?: (\d{4}))?/);
+      if (md) {
+        var mois = MOIS[md[2]], an = md[3] ? Number(md[3]) : null;
+        if (!an) { var auj = new Date(); an = auj.getFullYear(); if (mois >= 8 && auj.getMonth() + 1 < 7) an--; if (mois < 7 && auj.getMonth() + 1 >= 8) an++; }
+        r.date = an + '-' + String(mois).padStart(2, '0') + '-' + String(md[1]).padStart(2, '0');
+      }
+      var mh = texte.match(/RDV\s*[:à]?\s*(\d{1,2})\s*[hH:]\s*(\d{2})?/);
+      if (mh) r.heure = mh[1] + 'h' + (mh[2] || '00');
+      var ma = plat.match(/liste de (\d{1,2}) joueur/);
+      if (ma) r.attendus = Number(ma[1]);
+
+      // Adversaire : mots qui suivent « VS » sur la même ligne, jusqu'au premier grand espace
+      var mots = data.words || [];
+      for (var i = 0; i < mots.length; i++) {
+        if (/^vs\.?$/i.test(mots[i].text)) {
+          var res = [], prec = mots[i];
+          for (var k = i + 1; k < mots.length; k++) {
+            var w = mots[k], h = Math.max(prec.bbox.y1 - prec.bbox.y0, 10);
+            if (Math.abs(w.bbox.y0 - prec.bbox.y0) > h || w.bbox.x0 - prec.bbox.x1 > 1.5 * h) break;
+            res.push(w.text);
+            prec = w;
+          }
+          r.adversaire = res.join(' ').replace(/[^\wÀ-ÿ'’ .\-]/g, '').trim();
+          break;
+        }
+      }
+      if (!r.adversaire) {
+        var mv = texte.match(/\bVS\.?\s+([^\n]+)/i);
+        if (mv) r.adversaire = mv[1].split(/\s{2,}|Pensez|Survêtement/)[0].trim();
+      }
+
+      // Joueurs : éléments numérotés « 1. Prénom » entre « joueurs » et « Joueur Muté »
+      var debut = texte.search(/joueurs?\s*:/i);
+      var fin = texte.search(/=\s*Joueur/i);
+      var zone = texte.slice(debut >= 0 ? debut : 0, fin > debut ? fin : texte.length);
+      var re = /(\d{1,2})\s*[.)]\s+([^\d\n]*)/g, m, vus = {};
+      while ((m = re.exec(zone))) {
+        if (m.index > 0 && /\d/.test(zone.charAt(m.index - 1))) continue;
+        var num = Number(m[1]);
+        if (!num || (r.attendus && num > r.attendus) || vus[num]) continue;
+        var j = trouverJoueur(m[2]);
+        if (j) {
+          vus[num] = true;
+          if (r.joueurs.indexOf(j) === -1) r.joueurs.push(j);
+        } else {
+          var brut = m[2].replace(/[^A-Za-zÀ-ÿ' \-]/g, ' ').trim().split(/\s+/).slice(0, 2).join(' ');
+          if (brut.length >= 3) { vus[num] = true; r.inconnus.push(num + '. ' + brut); }
+        }
+      }
+      return r;
+    }
+    function lireImage(fichier) {
+      if (!fichier || !/^image\//.test(fichier.type)) return toast('Choisissez une image (PNG ou JPG).');
+      var apercu = document.getElementById('apercuImage');
+      apercu.src = URL.createObjectURL(fichier);
+      apercu.hidden = false;
+      etatImage('⏳ Lecture de l\'image… (quelques secondes la première fois)');
+      chargerTesseract().then(function () {
+        return Tesseract.recognize(fichier, 'fra');
+      }).then(function (res) {
+        var r = analyserConvocation(res.data);
+        if (r.date) document.getElementById('mDate').value = r.date;
+        if (r.adversaire) document.getElementById('mAdversaire').value = r.adversaire;
+        if (r.heure) document.getElementById('mHeure').value = r.heure;
+        document.querySelectorAll('#grilleConvoques input').forEach(function (c) { c.checked = false; });
+        r.joueurs.forEach(function (j) {
+          var c = document.querySelector('#grilleConvoques input[value="' + String(j.licence).replace(/"/g, '\\"') + '"]');
+          if (c) c.checked = true;
+        });
+        document.getElementById('mListe').value = r.joueurs.map(nomComplet).join('\n');
+        majCompteConvoques();
+        var manque = [];
+        if (!r.date) manque.push('date');
+        if (!r.adversaire) manque.push('adversaire');
+        var msg = '✅ ' + r.joueurs.length + (r.attendus ? '/' + r.attendus : '') + ' enfant(s) reconnu(s)';
+        var alerte = manque.length || r.inconnus.length || (r.attendus && r.joueurs.length !== r.attendus);
+        if (r.inconnus.length) msg += ' · non reconnu(s) : ' + r.inconnus.join(', ');
+        if (manque.length) msg += ' · à compléter : ' + manque.join(', ');
+        msg += ' · Vérifiez puis choisissez l\'équipe.';
+        etatImage(alerte ? msg.replace('✅', '⚠️') : msg, alerte ? 'alerte' : 'ok');
+        document.getElementById('mEquipe').focus();
+      }).catch(function (e) {
+        etatImage('⛔ ' + (e && e.message ? e.message : e), 'alerte');
+      });
+    }
+    (function () {
+      var zone = document.getElementById('zoneImage'), input = document.getElementById('mImage');
+      document.getElementById('lienChoisirImage').addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); input.click(); });
+      zone.addEventListener('click', function () { input.click(); });
+      input.addEventListener('change', function () { lireImage(input.files[0]); input.value = ''; });
+      ['dragenter', 'dragover'].forEach(function (t) {
+        zone.addEventListener(t, function (e) { e.preventDefault(); zone.classList.add('survol'); });
+      });
+      ['dragleave', 'drop'].forEach(function (t) {
+        zone.addEventListener(t, function (e) { e.preventDefault(); zone.classList.remove('survol'); });
+      });
+      zone.addEventListener('drop', function (e) { lireImage(e.dataTransfer.files[0]); });
+      document.addEventListener('paste', function (e) {
+        if (!document.getElementById('vue-ajouter').classList.contains('active')) return;
+        var items = (e.clipboardData && e.clipboardData.items) || [];
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].type.indexOf('image/') === 0) { e.preventDefault(); lireImage(items[i].getAsFile()); return; }
+        }
+      });
+    })();
+
     /* ---------- Ajouts ---------- */
     document.getElementById('btnAjouterMatch').addEventListener('click', function () {
+      var joueurs = [];
+      document.querySelectorAll('#grilleConvoques input:checked').forEach(function (c) { joueurs.push(c.value); });
       var m = {
         date: document.getElementById('mDate').value,
         equipe: document.getElementById('mEquipe').value,
@@ -767,15 +1032,30 @@
         phase: document.getElementById('mPhase').value.trim() || '1',
         journee: document.getElementById('mJournee').value,
         adversaire: document.getElementById('mAdversaire').value.trim(),
-        lieu: document.getElementById('mLieu').value
+        lieu: document.getElementById('mLieu').value,
+        heure: document.getElementById('mHeure').value.trim(),
+        joueurs: joueurs
       };
       if (!m.date) return toast('Indiquez la date du match.');
-      appel('ajouterMatch', m).then(function () {
-        document.getElementById('mAdversaire').value = '';
-        document.getElementById('mJournee').value = '';
-        toast('Match ajouté.');
-        return rafraichirDonnees(etat.feuille ? etat.feuille.match.id : null);
-      }).catch(erreur);
+      if (!m.equipe) return toast('Choisissez l\'équipe (1, 2 ou 3).');
+      if (!joueurs.length && !confirm('Aucun enfant coché. Créer la feuille quand même ?')) return;
+      var btn = this;
+      btn.disabled = true;
+      appel('ajouterMatch', m).then(function (d) {
+        ['mAdversaire', 'mJournee', 'mHeure', 'mListe', 'mDate'].forEach(function (id) { document.getElementById(id).value = ''; });
+        document.getElementById('mEquipe').value = '';
+        document.getElementById('mNonReconnus').textContent = '';
+        document.querySelectorAll('#grilleConvoques input').forEach(function (c) { c.checked = false; });
+        majCompteConvoques();
+        document.getElementById('apercuImage').hidden = true;
+        etatImage('');
+        etat.modifie = false;
+        return rafraichirDonnees(d.nouveauMatch).then(function () {
+          document.querySelector('nav button[data-vue=feuille]').click();
+          ouvrirFeuille(d.nouveauMatch);
+          toast('Feuille créée (' + joueurs.length + ' convoqué(s)) : vérifiez les statuts.');
+        });
+      }).catch(erreur).then(function () { btn.disabled = false; });
     });
 
     document.getElementById('btnAjouterJoueur').addEventListener('click', function () {
